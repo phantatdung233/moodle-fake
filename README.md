@@ -4,13 +4,14 @@ Web app tiếng Việt cho sinh viên làm bài trắc nghiệm Python xuất t�
 giảng viên duyệt lại đáp án trước khi publish. Spec đầy đủ: GitHub issue #1
 (bản sao trong `.scratch/moodle-quiz-platform/spec.md`).
 
-Ticket hiện tại (Ticket 6) gồm: khung Next.js 15 App Router, đăng nhập admin
+Đã có (đến Ticket 8): khung Next.js 15 App Router, đăng nhập admin
 (`/admin/login`, cookie httpOnly), middleware chặn `/admin/**`, **upload file
 Moodle JSON → đề nháp** với màn hình preview (số câu theo loại, số câu cần duyệt,
 lỗi parse), danh sách đề ở `/admin`, **parser thuần** biến file Moodle thành
 `Question` chuẩn hoá (`src/lib/quiz/parser.ts`), **module chấm điểm thuần**
-(`src/lib/quiz/grading.ts`), và **luồng sinh viên luyện tập** (`/`, `/q/<slug>`):
-nhập MSSV + họ tên, mỗi màn một câu, tự lưu, xem đáp án tức thì.
+(`src/lib/quiz/grading.ts`), **luồng sinh viên luyện tập** (`/`, `/q/<slug>`):
+nhập MSSV + họ tên, mỗi màn một câu, tự lưu, xem đáp án tức thì, và **giải thích
+Gemini streaming** sau mỗi câu (`POST /api/explain`, cache theo `Question.hash`).
 
 ## Yêu cầu
 
@@ -28,7 +29,8 @@ cp .env.example .env.local     # rồi sửa ADMIN_PASSWORD, SESSION_SECRET
 ```
 
 `pnpm install` cần chạy được build script của `esbuild`, `unrs-resolver`,
-`mongodb-memory-server`; các package này đã nằm trong `allowBuilds` của
+`mongodb-memory-server`, `@google/genai` (và `protobufjs` nó kéo theo); các package
+này đã nằm trong `allowBuilds` của
 `pnpm-workspace.yaml`. Nếu pnpm vẫn cảnh báo "Ignored build scripts", chạy
 `pnpm approve-builds --all` rồi `pnpm install` lại.
 
@@ -50,7 +52,7 @@ Tên database mặc định: `moodle_quiz`.
 | `MONGODB_URI` | Chuỗi kết nối MongoDB, vd `mongodb://127.0.0.1:27017/moodle_quiz`. Prod dùng Atlas. |
 | `ADMIN_PASSWORD` | Mật khẩu đăng nhập `/admin` (một tài khoản admin duy nhất). |
 | `SESSION_SECRET` | Bí mật HMAC ký cookie phiên admin **và** cookie danh tính sinh viên. Tạo bằng `openssl rand -hex 32`. |
-| `GEMINI_API_KEY` | Key Google Gemini cho phần giải thích (chưa dùng ở ticket này). |
+| `GEMINI_API_KEY` | Key Google Gemini cho phần giải thích. Để trống vẫn chạy: UI hiện “Chưa cấu hình Gemini”, chấm điểm không phụ thuộc Gemini. **Không** đặt `GOOGLE_API_KEY` song song — SDK ưu tiên biến đó và sẽ dùng nhầm key. |
 | `GEMINI_MODEL` | Model Gemini dùng để sinh giải thích. Mặc định `gemini-2.5-flash` khi để trống. |
 
 Next.js đọc `.env.local`; `pnpm seed` đọc `.env.local` rồi `.env`.
@@ -205,6 +207,46 @@ tab thua đọc lại bài đã tạo. Làm lại sau khi nộp (ticket #8) sẽ
 Server actions cho trình duyệt (`src/lib/student/actions.ts`):
 `beginAttempt`, `loadAttempt`, `saveAnswer`, `revealAnswer`, `forgetStudent`.
 
+## Giải thích bằng Gemini (`src/lib/gemini/`, `/api/explain`)
+
+Sau khi câu được chấm (chế độ luyện tập: bấm **Xem đáp án**) một panel
+**“Giải thích bằng AI”** hiện dưới phần phản hồi và chữ chạy dần. Đúng/sai và
+đáp án **không bao giờ** đến từ Gemini — đó là kết quả của `gradeAnswer`; Gemini
+chỉ viết lời giải thích (tiếng Việt, ngắn), và được yêu cầu **nói thẳng** nếu
+đáp án ghi nhận trong đề sai kiến thức (Q144, Q153, Q156, Q165…).
+
+- `buildExplanationPrompt({ question, studentAnswer })` → `string` — hàm thuần
+  (seam được test, không gọi mạng): chứa nội dung câu, mọi lựa chọn kèm key,
+  đáp án ghi nhận, câu trả lời của sinh viên; với `multianswer` liệt kê **mọi ô**
+  cùng đáp án mong đợi và điều sinh viên gõ; kèm yêu cầu tiếng Việt/ngắn gọn.
+- `explainQuestion({ question, studentAnswer, client?, apiKey? })` →
+  `{ ok, source: "cache" | "generated", stream } | { ok: false, error, stream }`.
+  `stream` phát từng `{ text }` rồi `{ error }` nếu model hỏng giữa dòng. Ghi
+  `ExplanationCache` khi stream xong; lỗi/trống thì **không** cache để lần sau
+  sinh lại. Truyền `client` (`ExplainClient = { stream(prompt): AsyncIterable<string> }`)
+  để test bằng fake model và đếm số lần gọi.
+- `getStoredExplanation({ hash })` / `getCachedExplanation(hash)` → `string | null`
+  — chỉ đọc cache; trang tổng kết (ticket sau) dùng để hiện lại giải thích có sẵn.
+- `EXPLANATION.notConfigured` (“Chưa cấu hình Gemini”) và
+  `EXPLANATION.unavailable` (“Chưa cấu hình hoặc không dùng được Gemini”) nằm ở
+  `messages.ts` — file an toàn cho client, không kéo SDK vào bundle trình duyệt.
+- Model: `GEMINI_MODEL` (mặc định `gemini-2.5-flash`, `thinkingBudget: 0`). Nếu
+  project Google chưa được cấp quyền 2.5 chỉ cần đổi biến này, không sửa code.
+
+**Cache** (`ExplanationCache`: `questionHash` unique, `questionId`, `text`,
+`createdAt`): khoá là `Question.hash` (SHA-256 của nội dung + đáp án). Sinh viên
+thứ hai xem cùng câu → nhận cache, không gọi model. Giảng viên sửa đáp án →
+hash đổi → giải thích mới; `Attempt` cũ vẫn mang hash cũ nên đọc đúng bản cũ.
+
+**Route** `POST /api/explain` (`runtime = "nodejs"`, `dynamic = "force-dynamic"`):
+body `{ questionId, questionHash? }`. Server tự lấy Question + câu trả lời từ
+`Attempt` của cookie sinh viên (không tin hash/hay text từ trình duyệt).
+Response `text/event-stream` gồm `data: {"text":…}` … `data: {"done":true}`;
+lỗi mềm là `data: {"error":…}` với status `200` kèm header
+`X-Explain-Status: soft-error`. `401` chưa có danh tính, `404` câu không thuộc
+bài, `409` trang đã cũ (hash lệch) → panel nhắc tải lại. Client đọc bằng
+`readExplanationFrames()` (`fetch` + `ReadableStream` reader) và có nút **Thử lại**.
+
 ## Cấu trúc
 
 ```
@@ -218,6 +260,10 @@ src/lib/admin/           mật khẩu admin, session cookie, server actions logi
                          upload.ts (đọc file + preview, gọi parser)
 src/lib/quiz/            model Quiz + Attempt, parser Moodle, grading, repository,
                          attempt-repository, content/splitPlaceholders, markdown, slug
+src/lib/gemini/          prompt thuần, ExplainClient + SDK Gemini, ExplanationCache,
+                         explainQuestion, đọc frame SSE, messages (dùng cho client)
+src/app/api/explain/     route handler streaming giải thích
+src/components/quiz/explanation-panel.tsx  panel “Giải thích bằng AI”
 src/lib/student/         session cookie sinh viên, server actions, answers (helper thuần),
                          feedback (câu chữ phản hồi)
 src/lib/db.ts            kết nối Mongoose dùng chung
