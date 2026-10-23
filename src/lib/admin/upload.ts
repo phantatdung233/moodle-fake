@@ -11,6 +11,8 @@ import {
   type MoodleQuestionError,
   type QuizParseStats,
 } from "@/lib/quiz/parser";
+import type { UploadFilePayload } from "@/lib/admin/upload-file";
+import { MAX_UPLOAD_BYTES } from "@/lib/admin/upload-limits";
 import type { QuizQuestion } from "@/lib/quiz/quiz.model";
 import {
   createDraftQuizFromQuestions,
@@ -18,9 +20,18 @@ import {
   type CreateDraftQuizResult,
 } from "@/lib/quiz/repository";
 
-export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+export { MAX_UPLOAD_BYTES };
 
 export type QuizUploadFile = Pick<File, "size" | "text">;
+
+/**
+ * Rebuilds the `File` from the parts the browser sent (`upload-file.ts`).
+ * React's Server Action encoder does not carry a `File` in a reference — it
+ * arrives as a `FormData` — so the client sends bytes + metadata explicitly.
+ */
+export function uploadFileFromPayload(payload: UploadFilePayload): File {
+  return new File([payload.bytes], payload.name, { type: payload.type ?? "" });
+}
 
 export type QuizUploadPreview = {
   questions: QuizQuestion[];

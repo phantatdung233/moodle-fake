@@ -3,7 +3,8 @@ import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { MongoMemoryServer } from "mongodb-memory-server";
 import { Quiz } from "../quiz/quiz.model";
-import { previewQuizUpload, createQuizFromUpload } from "./upload";
+import { previewQuizUpload, createQuizFromUpload, uploadFileFromPayload } from "./upload";
+import { toUploadFilePayload } from "./upload-file";
 import { clearTestDatabase, startTestDatabase, stopTestDatabase } from "@/test/mongo";
 
 const MOODLE_FILE = path.resolve(process.cwd(), "moodle_quiz_merged.json");
@@ -35,6 +36,19 @@ describe("previewQuizUpload", () => {
       ok: false,
       error: "File JSON phải là một mảng câu hỏi ở cấp cao nhất, không phải object",
     });
+  });
+
+  it("đọc được file sau khi chia nhỏ cho server action (toUploadFilePayload)", async () => {
+    const original = moodleUpload();
+    const rebuilt = uploadFileFromPayload(await toUploadFilePayload(original));
+
+    const fromPayload = await previewQuizUpload(rebuilt);
+    const direct = await previewQuizUpload(original);
+
+    if (!fromPayload.ok || !direct.ok) throw new Error("preview failed");
+    expect(rebuilt.name).toBe("moodle_quiz_merged.json");
+    expect(fromPayload.stats).toEqual(direct.stats);
+    expect(fromPayload.questions).toEqual(direct.questions);
   });
 
   it("từ chối mảng rỗng bằng thông báo tiếng Việt", async () => {
