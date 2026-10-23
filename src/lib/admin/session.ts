@@ -1,3 +1,5 @@
+import { cookies } from "next/headers";
+
 export const ADMIN_SESSION_COOKIE = "admin_session";
 export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 
@@ -111,6 +113,16 @@ export async function readAdminSession(
   if (!Number.isFinite(issuedAt)) return false;
   const ageSeconds = Math.floor(Date.now() / 1000) - issuedAt;
   return ageSeconds >= 0 && ageSeconds <= ADMIN_SESSION_MAX_AGE_SECONDS;
+}
+
+/**
+ * True when the current request carries a valid admin session cookie. Server
+ * actions must call this themselves: middleware already gates `/admin/**` in
+ * the browser, but anyone who can POST to an action skips that gate.
+ */
+export async function hasAdminSession(): Promise<boolean> {
+  const cookieStore = await cookies();
+  return readAdminSession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value);
 }
 
 /** The cookie value that clears the admin session. */
