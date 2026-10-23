@@ -78,16 +78,16 @@ async function main(): Promise<void> {
   await page.click("button[type=submit]");
   // Poll the DOM for the error text: the alert only exists after the action's
   // state update re-renders the form.
-  const alert = await page
+  const alert: string | null = await page
     .waitForFunction(() => document.querySelector("[role=alert]")?.textContent ?? null, undefined, {
       timeout: 8000,
     })
-    .then((handle) => handle.jsonValue<string>())
-    .catch(() => "");
+    .then((handle) => handle.jsonValue() as Promise<string | null>)
+    .catch(() => null);
   check(
     "wrong password shows a Vietnamese error and stays put",
-    alert.includes("Mật khẩu không đúng.") && new URL(page.url()).pathname === "/admin/login",
-    `${alert} @ ${new URL(page.url()).pathname}`,
+    (alert ?? "").includes("Mật khẩu không đúng.") && new URL(page.url()).pathname === "/admin/login",
+    `${alert ?? ""} @ ${new URL(page.url()).pathname}`,
   );
 
   await page.fill("#password", "smoke-pass");
