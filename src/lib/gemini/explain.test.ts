@@ -185,17 +185,32 @@ describe("explainQuestion", () => {
     }
   });
 
-  it("model không dùng được (lỗi quyền/model) → lỗi mềm, không lộ stack trace", async () => {
+  it("model không dùng được (lỗi quyền/model) → lỗi mềm nhắc đổi GEMINI_MODEL, không lộ stack trace", async () => {
     const client: ExplainClient = {
       // The SDK throws a double-encoded JSON string, not an Error.
       async *stream() {
-        throw '{"error":{"code":403,"message":"API_KEY_INVALID"}}';
+        throw '{"error":{"code":403,"message":"PERMISSION_DENIED: models/gemini-2.5-flash is not available"}}';
       },
     };
 
     const result = await explainQuestion({ question: question("Q001"), studentAnswer: {}, client });
 
     // `ok` is decided before the first token; the failure shows up as a frame.
+    expect(await frames(result)).toEqual([{ error: EXPLANATION.modelUnavailable }]);
+    expect(EXPLANATION.modelUnavailable).toBe(
+      "Gemini không dùng được với cấu hình hiện tại — kiểm tra GEMINI_API_KEY hoặc đổi GEMINI_MODEL",
+    );
+  });
+
+  it("lỗi tạm thời (mất mạng) giữ thông báo chung, không đổ lỗi cấu hình", async () => {
+    const client: ExplainClient = {
+      async *stream() {
+        throw new Error("fetch failed: ECONNRESET");
+      },
+    };
+
+    const result = await explainQuestion({ question: question("Q001"), studentAnswer: {}, client });
+
     expect(await frames(result)).toEqual([{ error: EXPLANATION.unavailable }]);
     expect(EXPLANATION.unavailable).toBe("Chưa cấu hình hoặc không dùng được Gemini");
   });

@@ -49,6 +49,43 @@ function softError(message: string): ExplainResult {
 }
 
 /**
+ * SDK error codes/messages that mean "this key or this model is not usable
+ * here", as opposed to a transient network/5xx failure. The SDK often throws a
+ * double-encoded JSON string instead of an `Error`, so match both.
+ */
+const CONFIG_ERRORS = [
+  /\b40[13]\b/, // 401/403: bad key, permission, refused the call
+  /\b404\b/, // model not found
+  /API_KEY_INVALID/i,
+  /PERMISSION_DENIED/i,
+  /UNAUTHENTICATED/i,
+  /NOT_FOUND/i,
+  /INVALID_ARGUMENT/i,
+  /not found/i,
+  /not supported/i,
+  /unsupported/i,
+  /model .* (?:is )?not (?:available|found)/i,
+];
+
+/**
+ * Picks the soft error for a failed generation. A configuration problem points
+ * at `GEMINI_API_KEY`/`GEMINI_MODEL`; anything else (network drop, 5xx,
+ * timeout) keeps the generic message so a temporary outage is not mistaken for
+ * a misconfiguration.
+ */
+export function explanationErrorFor(error: unknown): string {
+  const text =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : "";
+  return CONFIG_ERRORS.some((pattern) => pattern.test(text))
+    ? EXPLANATION.modelUnavailable
+    : EXPLANATION.unavailable;
+}
+
+/**
  * Wraps the generator so every failure becomes frames, never a thrown error:
  * `ok: true` promises "cached text or a live model stream", the frame stream
  * reports a mid-stream failure honestly while keeping whatever was already shown.
@@ -59,22 +96,22 @@ async function* generateFrames(
   onComplete: (text: string) => Promise<void>,
 ): AsyncGenerator<ExplanationEvent> {
   const chunks: string[] = [];
-  let failed = false;
+  let failure: string | null = null;
   try {
     for await (const chunk of client.stream(prompt)) {
       if (!chunk || chunk.trim() === "") continue;
       chunks.push(chunk);
       yield { text: chunk };
     }
-  } catch {
-    failed = true;
+  } catch (error) {
+    failure = explanationErrorFor(error);
   }
 
   // Only a complete, non-empty answer is worth caching: a failed or empty
   // generation must ask the model again next time.
   const text = chunks.join("").trim();
-  if (failed || text === "") {
-    yield { error: EXPLANATION.unavailable };
+  if (failure !== null || text === "") {
+    yield { error: failure ?? EXPLANATION.unavailable };
     return;
   }
   try {
@@ -103,8 +140,9 @@ export async function explainQuestion(input: ExplainQuestionInput): Promise<Expl
   try {
     client = input.client ?? createGeminiClient(apiKey);
   } catch {
-    // Constructing the SDK can fail on a malformed key: still a soft error.
-    return softError(EXPLANATION.unavailable);
+    // Constructing the SDK fails on a malformed key: a configuration problem,
+    // so the message names the env vars to check.
+    return softError(EXPLANATION.modelUnavailable);
   }
 
   return {
