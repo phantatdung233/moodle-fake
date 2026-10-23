@@ -11,6 +11,18 @@ import { getCachedExplanation, saveExplanation } from "./cache";
 import { createGeminiClient, getGeminiApiKey, type ExplainClient } from "./client";
 import { EXPLANATION } from "./messages";
 
+/**
+ * Swappable only under `NODE_ENV=test`, where the admin-explanation route test
+ * injects a fake client (the same seam the unit tests use by hand).
+ */
+let testClientFactory: ((apiKey: string) => ExplainClient) | null = null;
+
+/** Test-only: run the real route against a fake model instead of the SDK. */
+export function useTestGeminiClient(factory: (apiKey: string) => ExplainClient): void {
+  if (process.env.NODE_ENV !== "test") throw new Error("chỉ dùng trong test");
+  testClientFactory = factory;
+}
+
 export { EXPLANATION } from "./messages";
 
 /**
@@ -138,7 +150,10 @@ export async function explainQuestion(input: ExplainQuestionInput): Promise<Expl
 
   let client: ExplainClient;
   try {
-    client = input.client ?? createGeminiClient(apiKey);
+    client =
+      input.client ??
+      testClientFactory?.(apiKey) ??
+      createGeminiClient(apiKey);
   } catch {
     // Constructing the SDK fails on a malformed key: a configuration problem,
     // so the message names the env vars to check.

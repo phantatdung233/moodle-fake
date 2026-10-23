@@ -6,6 +6,7 @@ import {
   getQuizForReview,
   type AnswerReviewQuiz,
 } from "@/lib/quiz/review-repository";
+import { getCachedExplanation } from "@/lib/gemini/cache";
 import { Button } from "@/components/ui/button";
 import { ReviewQuestion, type ReviewPageMode } from "./review-question";
 
@@ -72,6 +73,10 @@ export default async function ReviewPage({ params, searchParams }: Props) {
       ? ((await getQuestionForReview(quiz.id, queue[0] ?? "")) ?? null)
       : question;
 
+  // Cached Gemini text, read on the server so the admin sees it immediately and
+  // only an explicit "Giải thích bằng AI" wakes the model.
+  const cachedExplanation = shownQuestion ? await getCachedExplanation(shownQuestion.hash) : null;
+
   const readOnly = quiz.status !== "draft";
   const positionInQueue =
     shownQuestion && queue.includes(shownQuestion.id)
@@ -113,6 +118,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
         totalCount={quiz.totalCount}
         answeredCount={quiz.answeredCount}
         readyQueue={quiz.readyQuestionIds}
+        cachedExplanation={cachedExplanation}
         reviewPath={reviewPath}
         recheckPath={recheckPath}
         done={{

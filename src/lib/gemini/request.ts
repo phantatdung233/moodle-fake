@@ -49,3 +49,9 @@ export type ExplanationFrame = {
 export function encodeFrame(frame: ExplanationFrame, done = false): string {
   return `data: ${JSON.stringify(done ? { ...frame, done: true } : frame)}\n\n`;
 }
+
+/** Several frames plus the closing `done` frame: the body of a short-lived response. */
+export function encodeFrames(frames: readonly ExplanationFrame[], done = true): string {
+  const body = frames.map((frame) => encodeFrame(frame)).join("");
+  return done ? `${body}${encodeFrame({}, true)}` : body;
+}

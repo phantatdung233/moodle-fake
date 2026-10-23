@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readExplanationRequest, encodeFrame } from "./request";
+import { readExplanationRequest, encodeFrame, encodeFrames } from "./request";
 
 describe("readExplanationRequest", () => {
   it("đọc questionId và questionHash từ JSON body", () => {
@@ -41,5 +41,17 @@ describe("encodeFrame", () => {
     expect(encoded.endsWith("\n\n")).toBe(true);
     const line = encoded.trim().slice("data: ".length);
     expect(JSON.parse(line)).toEqual({ text: "dòng 1\ndòng 2" });
+  });
+});
+
+describe("encodeFrames", () => {
+  it("nối các frame rồi đóng bằng đúng một frame done", () => {
+    expect(encodeFrames([{ error: "Chưa cấu hình Gemini" }])).toBe(
+      'data: {"error":"Chưa cấu hình Gemini"}\n\ndata: {"done":true}\n\n',
+    );
+  });
+
+  it("không thêm frame done khi được yêu cầu bỏ", () => {
+    expect(encodeFrames([{ text: "a" }], false)).toBe('data: {"text":"a"}\n\n');
   });
 });

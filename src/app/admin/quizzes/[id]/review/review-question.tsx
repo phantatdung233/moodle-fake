@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import type { QuizQuestion } from "@/lib/quiz/quiz.model";
 import { QuestionContent, QuestionImages } from "@/components/quiz/question-content";
 import { reviewAnswer, reviewRemoveQuestion } from "@/lib/admin/review-actions";
+import { AdminExplanation } from "./admin-explanation";
 
 export type ReviewPageMode = "review" | "recheck";
 
@@ -38,6 +39,8 @@ type Props = {
   answeredCount: number;
   /** The enabled `ready` Question ids, for the "Xem lại đáp án" list. */
   readyQueue: string[];
+  /** Gemini's stored explanation for the shown Question, or `null` when none. */
+  cachedExplanation: string | null;
   /** Where "Sửa đáp án" / "Quay lại duyệt" point on this page. */
   reviewPath: string;
   recheckPath: string;
@@ -57,6 +60,7 @@ export function ReviewQuestion({
   totalCount,
   answeredCount,
   readyQueue,
+  cachedExplanation,
   reviewPath,
   recheckPath,
   done,
@@ -147,6 +151,16 @@ export function ReviewQuestion({
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
             <ReviewedQuestionContent question={question} />
+
+            {/* Story 21: the flag and the button only — no automatic guessing
+                at "this answer looks wrong". Tests inject a fake Gemini client. */}
+            <AdminExplanation
+              key={`${question.id}-explanation`}
+              quizId={done.quizId}
+              questionId={question.id}
+              questionHash={question.hash}
+              initialText={cachedExplanation}
+            />
 
             {question.type === "multichoice" ? (
               <MultichoiceForm

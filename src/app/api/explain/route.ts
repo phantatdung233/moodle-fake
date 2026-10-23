@@ -12,7 +12,7 @@ import { cookies } from "next/headers";
 import { readStudentSession, STUDENT_SESSION_COOKIE } from "@/lib/student/session";
 import { explainQuestion, EXPLANATION } from "@/lib/gemini/explain";
 import { hashMatches, questionForExplanation } from "@/lib/gemini/explanation-question";
-import { encodeFrame, readExplanationRequest, type ExplanationFrame } from "@/lib/gemini/request";
+import { encodeFrame, encodeFrames, readExplanationRequest, type ExplanationFrame } from "@/lib/gemini/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,8 +22,7 @@ const QUESTION_NOT_FOUND = "Không tìm thấy câu hỏi trong bài.";
 const STALE_QUESTION = "Câu hỏi đã thay đổi. Tải lại trang rồi thử lại.";
 
 function frameResponse(frames: readonly ExplanationFrame[], status = 200): Response {
-  const body = frames.map((frame) => encodeFrame(frame)).join("");
-  return new Response(`${body}${encodeFrame({}, true)}`, {
+  return new Response(encodeFrames(frames), {
     status,
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
