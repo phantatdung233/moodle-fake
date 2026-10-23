@@ -4,9 +4,10 @@ Web app tiếng Việt cho sinh viên làm bài trắc nghiệm Python xuất t�
 giảng viên duyệt lại đáp án trước khi publish. Spec đầy đủ: GitHub issue #1
 (bản sao trong `.scratch/moodle-quiz-platform/spec.md`).
 
-Ticket hiện tại (Ticket 2) gồm: khung Next.js 15 App Router, đăng nhập admin
-(`/admin/login`, cookie httpOnly), middleware chặn `/admin/**`, danh sách đề
-(đang rỗng), CLI `pnpm seed`, và **parser thuần** biến file Moodle thành
+Ticket hiện tại (Ticket 4) gồm: khung Next.js 15 App Router, đăng nhập admin
+(`/admin/login`, cookie httpOnly), middleware chặn `/admin/**`, **upload file
+Moodle JSON → đề nháp** với màn hình preview (số câu theo loại, số câu cần duyệt,
+lỗi parse), danh sách đề ở `/admin`, và **parser thuần** biến file Moodle thành
 `Question` chuẩn hoá (`src/lib/quiz/parser.ts`).
 
 ## Yêu cầu
@@ -56,16 +57,34 @@ Next.js đọc `.env.local`; `pnpm seed` đọc `.env.local` rồi `.env`.
 
 ```bash
 pnpm dev        # http://localhost:3000, quản trị tại /admin
-pnpm seed       # đọc moodle_quiz_merged.json, chạy parser, in thống kê + lỗi parse
+pnpm seed       # đọc moodle_quiz_merged.json, chạy parser và tạo một đề nháp "Python cơ bản"
 pnpm test       # Vitest (node), dùng mongodb-memory-server
 pnpm lint       # ESLint
 pnpm build      # production build
 ```
 
-`pnpm seed` đọc file Moodle, chạy `parseQuizJson` rồi in tóm tắt (hiện tại:
-180 câu — 161 `multichoice`, 19 `multianswer`; 100 câu `needs_review`, 10 câu có
-ô trống chưa có đáp án, 88 lỗi parse) và ping MongoDB. Việc tạo đề nháp diễn ra
-ở ticket #4.
+`pnpm seed` đọc file Moodle, chạy `parseQuizJson`, in tóm tắt (180 câu — 161
+`multichoice`, 19 `multianswer`; 100 câu `needs_review`, 10 câu có ô trống chưa
+có đáp án, 88 lỗi parse) rồi tạo một đề **nháp** qua cùng lớp dữ liệu với upload.
+Chạy lại khi slug `python-co-ban` đã tồn tại thì seed dùng `python-co-ban-2`,
+`-3`…, không ghi đè đề cũ.
+
+## Upload đề và danh sách đề (`/admin`)
+
+1. Đăng nhập `/admin/login`, chọn file JSON xuất từ Moodle, bấm **Xem trước**.
+   Preview hiện số câu theo loại (multichoice/multianswer), số câu `needs_review`
+   và danh sách lỗi parse (`questionId` + lý do). Chưa có gì được lưu ở bước này.
+2. Đặt **tên đề** (bắt buộc) và **slug** — slug tự sinh từ tên, sửa được, chỉ gồm
+   chữ thường, số và dấu `-`, và phải là duy nhất. Bấm **Tạo đề nháp**.
+3. Hệ thống đọc lại file ở server, tạo một `Quiz` mới `status: draft` với **toàn
+   bộ** câu đã parse (kể cả câu `needs_review`), rồi mở `/admin/quizzes/<id>`.
+
+- Upload cùng một file lần nữa tạo đề **mới**; đề cũ không bị đụng tới.
+- File top-level không phải mảng, JSON hỏng, file rỗng hoặc lớn hơn 5 MB bị từ
+  chối bằng thông báo tiếng Việt, không ghi gì vào DB.
+- Slug trùng cũng bị từ chối; preview vẫn hiện để chỉ cần sửa slug.
+- `/admin` liệt kê mọi đề: tên, slug, chế độ, trạng thái, số câu, số câu cần duyệt
+  và số lượt làm. Chưa có model `Attempt` nên số lượt làm luôn là 0.
 
 ### Parser (`src/lib/quiz/parser.ts`)
 
@@ -88,15 +107,28 @@ Lần đầu chạy `pnpm test`, `mongodb-memory-server` tải binary `mongod` r
 ## Cấu trúc
 
 ```
-src/app/                 App Router: trang chủ, /admin, /admin/login
+src/app/                 App Router: trang chủ, /admin, /admin/login, /admin/quizzes/[id]
 src/components/ui/       shadcn/ui (preset radix-nova)
-src/lib/admin/           mật khẩu admin, session cookie, server actions login/logout
-src/lib/quiz/            model Quiz (Mongoose) và parser Moodle → Question chuẩn hoá
+src/lib/admin/           mật khẩu admin, session cookie, server actions login/logout/upload,
+                         upload.ts (đọc file + preview, gọi parser)
+src/lib/quiz/            model Quiz (Mongoose), parser Moodle, repository (tạo/đọc Quiz), slug
 src/lib/db.ts            kết nối Mongoose dùng chung
 src/middleware.ts        chặn mọi /admin/** khi chưa có phiên hợp lệ
 src/test/                helper test: env, mongodb-memory-server
 scripts/seed.ts          CLI pnpm seed
 ```
+
+### Lớp dữ liệu Quiz (`src/lib/quiz/repository.ts`)
+
+Dùng chung bởi server action và các trang admin (trả về object thuần, không phải
+Mongoose document):
+
+- `createDraftQuizFromQuestions({ title, slug, questions })` →
+  `{ ok: true, quizId, slug } | { ok: false, error }` — tạo đề nháp, kiểm tra
+  tên/slug, bắt slug trùng qua unique index (kể cả khi upload đồng thời).
+- `listQuizzes()` → `QuizListItem[]` cho `/admin` (số câu, ready/needs_review, lượt làm).
+- `getQuizForAdmin(id)` → `QuizDetail | null` cho `/admin/quizzes/[id]`
+  (`null` khi id sai hoặc không tồn tại).
 
 ## Ghi chú
 
