@@ -264,4 +264,22 @@ describe("getQuizForAdmin", () => {
     expect(await getQuizForAdmin("6a1b2c3d4e5f60718293a4b5")).toBeNull();
     expect(await getQuizForAdmin("khong-phai-object-id")).toBeNull();
   });
+
+  it("đếm số lượt làm theo đề trong danh sách admin", async () => {
+    const { questions } = moodleExport();
+    const created = await createDraftQuizFromQuestions({
+      title: "Python cơ bản",
+      slug: "python-co-ban",
+      questions,
+    });
+    if (!created.ok) throw new Error(created.error);
+
+    const { resumeOrStartAttempt } = await import("./attempt-repository");
+    await resumeOrStartAttempt({ quizId: created.quizId, studentId: "B2012345", studentName: "Nguyễn Văn An" });
+    await resumeOrStartAttempt({ quizId: created.quizId, studentId: "B2012346", studentName: "Trần Thị Bình" });
+
+    const [quiz] = await listQuizzes();
+    expect(quiz.attemptCount).toBe(2);
+    expect((await getQuizForAdmin(created.quizId))?.attemptCount).toBe(2);
+  });
 });

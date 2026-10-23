@@ -63,7 +63,8 @@ const blankSchema = new mongoose.Schema<QuizBlank>(
   { _id: false },
 );
 
-const questionSchema = new mongoose.Schema<QuizQuestion>(
+/** Shared with Attempt.questionsSnapshot, so an Attempt embeds the same shape. */
+export const questionSchema = new mongoose.Schema<QuizQuestion>(
   {
     id: { type: String, required: true },
     no: { type: Number, required: true },
