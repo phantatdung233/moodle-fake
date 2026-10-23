@@ -134,4 +134,24 @@ describe("admin upload server actions", () => {
     expect(state).toMatchObject({ error: "Tên đề không được để trống." });
     expect(await Quiz.countDocuments()).toBe(0);
   });
+
+  it("lỗi bất ngờ (DB hỏng) → thông báo tiếng Việt, không ném stack trace", async () => {
+    await signIn();
+    const repository = await import("@/lib/quiz/repository");
+    const spy = vi
+      .spyOn(repository, "createDraftQuizFromQuestions")
+      .mockRejectedValueOnce(new Error("connection refused: mongodb://10.0.0.1"));
+
+    try {
+      const state = await confirmUpload(await moodlePayload(), {
+        title: "Python cơ bản",
+        slug: "python-co-ban",
+      });
+
+      expect(state).toEqual({ error: "Không thực hiện được thao tác. Kiểm tra kết nối rồi thử lại." });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await Quiz.countDocuments()).toBe(0);
+  });
 });

@@ -1,11 +1,12 @@
 "use server";
 
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { previewQuizUpload, uploadFileFromPayload } from "@/lib/admin/upload";
 import type { UploadFilePayload } from "@/lib/admin/upload-file";
+import { hasAdminSession } from "@/lib/admin/session";
 import { NO_SESSION_ERROR } from "@/lib/admin/review-messages";
-import { withAdmin } from "@/lib/admin/with-admin";
+import { GENERIC_ACTION_ERROR } from "@/lib/admin/with-admin";
 import { createDraftQuizFromQuestions } from "@/lib/quiz/repository";
 import type { MoodleQuestionError, QuizParseStats } from "@/lib/quiz/parser";
 
@@ -82,12 +83,21 @@ export async function previewUpload(
  * Called from the client inside `startTransition` rather than as a form action:
  * a hydrated Next runtime carries only one useActionState action per form, and
  * step 1 already owns it. Wrap it before calling — see `ConfirmUploadResult`.
+ *
+ * Written out by hand instead of through `withAdmin`: a `"use server"` module
+ * may only export async functions, and `export const confirmUpload = withAdmin(…)`
+ * is a plain call at module scope. `withAdmin` rethrows Next's control flow, so
+ * the redirect still leaves the handler.
  */
-export const confirmUpload = withAdmin(
-  async function confirmUpload(
-    payload: UploadFilePayload,
-    input: ConfirmUploadInput,
-  ): Promise<ConfirmUploadResult> {
+export async function confirmUpload(
+  payload: UploadFilePayload,
+  input: ConfirmUploadInput,
+): Promise<ConfirmUploadResult> {
+  // No session (rare: middleware already gates the page): keep the preview step
+  // on screen with the same message every admin action uses.
+  if (!(await hasAdminSession())) return { error: NO_SESSION_ERROR };
+
+  try {
     const preview = await previewQuizUpload(uploadFileFromPayload(payload));
     if (!preview.ok) {
       return { error: preview.error };
@@ -106,8 +116,10 @@ export const confirmUpload = withAdmin(
 
     revalidatePath("/admin");
     redirect(`/admin/quizzes/${result.quizId}`);
-  },
-  // No session (rare: middleware already gates the page): keep the preview
-  // step on screen with the same message every admin action uses.
-  () => ({ error: NO_SESSION_ERROR }) satisfies UploadState,
-);
+  } catch (error) {
+    // Same contract as withAdmin: Next's redirect/notFound pass through, every
+    // other failure becomes one Vietnamese message, never a stack trace.
+    unstable_rethrow(error);
+    return { error: GENERIC_ACTION_ERROR };
+  }
+}
