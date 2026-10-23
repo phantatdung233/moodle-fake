@@ -14,6 +14,12 @@ export type QuestionReviewProps = {
   grade: AttemptQuestionResult;
   selectedOptionKeys: string[];
   blankValues: string[];
+  /**
+   * Server-rendered cached explanation. When provided (the admin's attempt
+   * detail), it is shown instead of the AI panel, which would wake the model.
+   * `null` means "nothing cached for this snapshot".
+   */
+  explanation?: string | null;
 };
 
 /**
@@ -27,6 +33,7 @@ export function QuestionReview({
   grade,
   selectedOptionKeys,
   blankValues,
+  explanation,
 }: QuestionReviewProps) {
   const answered =
     selectedOptionKeys.length > 0 || blankValues.some((value) => value.trim() !== "");
@@ -143,12 +150,25 @@ export function QuestionReview({
       ) : null}
 
       {/* Ticket #9: the explanation streams in under the graded answer, practice
-          or exam alike. A blank Question still shows the model's explanation. */}
-      <ExplanationPanel
-        questionId={question.id}
-        questionHash={question.hash}
-        mode="summary"
-      />
+          or exam alike. A blank Question still shows the model's explanation.
+          The admin's attempt detail passes a stored explanation instead, so
+          reading an old paper never calls the model. */}
+      {explanation === undefined ? (
+        <ExplanationPanel
+          questionId={question.id}
+          questionHash={question.hash}
+          mode="summary"
+        />
+      ) : (
+        <div className="flex flex-col gap-1 rounded-lg border bg-muted/20 p-4 text-sm">
+          <p className="font-medium">Giải thích{explanation ? " đã lưu" : ""}</p>
+          {explanation ? (
+            <p className="whitespace-pre-wrap leading-relaxed text-pretty">{explanation}</p>
+          ) : (
+            <p className="text-muted-foreground">Chưa có giải thích cho câu này.</p>
+          )}
+        </div>
+      )}
     </article>
   );
 }
