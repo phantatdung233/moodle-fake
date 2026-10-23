@@ -22,15 +22,22 @@ vi.mock("next/headers", () => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const { confirmUpload, previewUpload } = await import("./upload-actions");
+const { toUploadFilePayload } = await import("@/lib/admin/upload-file");
 type UploadState = import("./upload-actions").UploadState;
 
 const MOODLE_FILE = path.resolve(process.cwd(), "moodle_quiz_merged.json");
 
-function uploadForm(fields: { title: string; slug: string }): FormData {
+function moodleFile(): File {
+  return new File([readFileSync(MOODLE_FILE)], "moodle_quiz_merged.json");
+}
+
+function moodlePayload() {
+  return toUploadFilePayload(moodleFile());
+}
+
+function previewForm(): FormData {
   const form = new FormData();
-  form.set("file", new File([readFileSync(MOODLE_FILE)], "moodle_quiz_merged.json"));
-  form.set("title", fields.title);
-  form.set("slug", fields.slug);
+  form.set("file", moodleFile());
   return form;
 }
 
@@ -42,7 +49,7 @@ async function signIn(): Promise<void> {
   sessionCookie.value = (await createAdminSessionCookie()).value;
 }
 
-describe("admin upload server action", () => {
+describe("admin upload server actions", () => {
   let server: MongoMemoryServer;
 
   beforeAll(async () => {
@@ -58,31 +65,8 @@ describe("admin upload server action", () => {
     sessionCookie.value = undefined;
   });
 
-  it("từ chối tạo đề khi không có phiên admin, kể cả khi middleware bị bỏ qua", async () => {
-    const state = await confirmUpload(
-      emptyState,
-      uploadForm({ title: "Python cơ bản", slug: "python-co-ban" }),
-    );
-
-    expect(state.error).toBe(
-      "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại rồi thử lại.",
-    );
-    expect(await Quiz.countDocuments()).toBe(0);
-  });
-
-  it("tạo đề khi request mang phiên admin hợp lệ", async () => {
-    await signIn();
-
-    // Success redirects, so the action rejects instead of returning state.
-    await expect(
-      confirmUpload(emptyState, uploadForm({ title: "Python cơ bản", slug: "python-co-ban" })),
-    ).rejects.toThrow(/NEXT_REDIRECT/);
-
-    expect(await Quiz.countDocuments({ slug: "python-co-ban" })).toBe(1);
-  });
-
   it("preview trả về số câu và lỗi parse mà không ghi gì vào DB", async () => {
-    const state = await previewUpload(emptyState, uploadForm({ title: "", slug: "" }));
+    const state = await previewUpload(emptyState, previewForm());
 
     expect(state.preview?.questions).toBe(180);
     expect(state.preview?.byType).toEqual({ multichoice: 161, multianswer: 19 });
@@ -91,20 +75,63 @@ describe("admin upload server action", () => {
     expect(await Quiz.countDocuments()).toBe(0);
   });
 
-  it("confirm với slug đã dùng trả lỗi tiếng Việt thay vì redirect", async () => {
+  it("preview file không phải mảng trả thông báo tiếng Việt thay vì ném lỗi", async () => {
+    const form = new FormData();
+    form.set("file", new File(['{"questions": []}'], "de.json"));
+
+    const state = await previewUpload(emptyState, form);
+
+    expect(state).toEqual({
+      error: "File JSON phải là một mảng câu hỏi ở cấp cao nhất, không phải object",
+    });
+  });
+
+  it("từ chối tạo đề khi không có phiên admin, kể cả khi middleware bị bỏ qua", async () => {
+    const state = await confirmUpload(await moodlePayload(), {
+      title: "Python cơ bản",
+      slug: "python-co-ban",
+    });
+
+    expect(state).toMatchObject({
+      error: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại rồi thử lại.",
+    });
+    expect(await Quiz.countDocuments()).toBe(0);
+  });
+
+  it("tạo đề khi request mang phiên admin hợp lệ", async () => {
+    await signIn();
+
+    // Success redirects, so the action rejects instead of returning state.
+    await expect(
+      confirmUpload(await moodlePayload(), { title: "Python cơ bản", slug: "python-co-ban" }),
+    ).rejects.toThrow(/NEXT_REDIRECT/);
+
+    expect(await Quiz.countDocuments({ slug: "python-co-ban" })).toBe(1);
+  });
+
+  it("confirm với slug đã dùng trả lỗi tiếng Việt, giữ preview và không ghi thêm", async () => {
     await signIn();
     await Quiz.create({ title: "Cũ", slug: "python-co-ban", mode: "practice" });
 
-    const state = await confirmUpload(
-      emptyState,
-      uploadForm({ title: "Python cơ bản", slug: "python-co-ban" }),
-    );
+    const state = await confirmUpload(await moodlePayload(), {
+      title: "Python cơ bản",
+      slug: "python-co-ban",
+    });
 
-    expect(state.error).toBe(
-      "Slug “python-co-ban” đã được dùng cho đề khác. Hãy chọn slug khác.",
-    );
+    expect(state).toMatchObject({
+      error: "Slug “python-co-ban” đã được dùng cho đề khác. Hãy chọn slug khác.",
+    });
     // The preview survives the failed confirm so the giảng viên only fixes the slug.
-    expect(state.preview?.questions).toBe(180);
+    expect(state?.preview?.questions).toBe(180);
     expect(await Quiz.countDocuments()).toBe(1);
+  });
+
+  it("confirm với tên đề rỗng không tạo đề", async () => {
+    await signIn();
+
+    const state = await confirmUpload(await moodlePayload(), { title: "   ", slug: "python-co-ban" });
+
+    expect(state).toMatchObject({ error: "Tên đề không được để trống." });
+    expect(await Quiz.countDocuments()).toBe(0);
   });
 });
