@@ -27,6 +27,20 @@ describe("formatPercent", () => {
   it("hiện gạch ngang cho lượt chưa có điểm", () => {
     expect(formatPercent(null)).toBe("—");
   });
+
+  it("ghim dấu phẩy thập phân dù máy chạy locale nào", () => {
+    // The Node ICU order (`vi-VN` vs `en-US` separators) must not leak into the UI.
+    const original = Intl.NumberFormat;
+    try {
+      Intl.NumberFormat = function () {
+        return { format: (value: number) => String(value) };
+      } as unknown as typeof Intl.NumberFormat;
+      expect(formatPercent(33.3333)).toBe("33,3%");
+      expect(formatPercent(100)).toBe("100%");
+    } finally {
+      Intl.NumberFormat = original;
+    }
+  });
 });
 
 describe("formatDate", () => {

@@ -13,6 +13,7 @@ import {
 import { QuizSettingsForm } from "./settings-form";
 import { QuestionSelectionList } from "./question-selection";
 import { QuizLifecycleCard } from "./lifecycle-card";
+import { formatDate } from "@/lib/admin/result-format";
 
 export const metadata: Metadata = {
   title: "Chi tiết đề",
@@ -198,15 +199,6 @@ export default async function AdminQuizPage({ params }: Props) {
       </div>
     </main>
   );
-}
-
-function formatDate(date: Date | null): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("vi-VN", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "Asia/Ho_Chi_Minh",
-  }).format(date);
 }
 
 function Stat({

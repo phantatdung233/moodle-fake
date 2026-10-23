@@ -32,7 +32,7 @@ export function attemptStatusLabel(
 /** `33,3%` (Vietnamese decimal comma), `—` while the Attempt has no score yet. */
 export function formatPercent(total: number | null): string {
   if (total === null) return "—";
-  return `${total.toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%`;
+  return `${Number(total.toFixed(1)).toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%`;
 }
 
 /** `23/10/2026 10:05` in Vietnam time; `—` for a missing date. */
