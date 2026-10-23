@@ -24,6 +24,8 @@ export type CreateDraftQuizInput = {
   questions: QuizQuestion[];
 };
 
+export const NO_QUESTIONS_ERROR = "File không có câu hỏi nào hợp lệ nên chưa tạo được đề.";
+
 export type CreateDraftQuizResult =
   | { ok: true; quizId: string; slug: string }
   | { ok: false; error: string };
@@ -42,8 +44,8 @@ function isDuplicateKeyError(error: unknown): boolean {
  * is dropped at upload time. Each call inserts a separate Quiz, so uploading
  * the same file twice never overwrites the first one.
  *
- * Rejects a blank title, a malformed slug and a slug already used by another
- * Quiz — with a Vietnamese message and nothing written.
+ * Rejects a blank title, a malformed slug, an empty question set and a slug
+ * already used by another Quiz — with a Vietnamese message and nothing written.
  */
 export async function createDraftQuizFromQuestions(
   input: CreateDraftQuizInput,
@@ -59,6 +61,11 @@ export async function createDraftQuizFromQuestions(
   }
   if (!isValidQuizSlug(slug)) {
     return { ok: false, error: SLUG_FORMAT_ERROR };
+  }
+  // No Question means nothing to review or publish; a draft Quiz with zero
+  // questions would only clutter `/admin`.
+  if (input.questions.length === 0) {
+    return { ok: false, error: NO_QUESTIONS_ERROR };
   }
 
   await ensureConnection();

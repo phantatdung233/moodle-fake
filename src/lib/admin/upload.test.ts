@@ -37,6 +37,13 @@ describe("previewQuizUpload", () => {
     });
   });
 
+  it("từ chối mảng rỗng bằng thông báo tiếng Việt", async () => {
+    expect(await previewQuizUpload(new File(["[]"], "de.json"))).toEqual({
+      ok: false,
+      error: "File không có câu hỏi nào hợp lệ nên chưa tạo được đề.",
+    });
+  });
+
   it("từ chối file không phải JSON hợp lệ", async () => {
     const preview = await previewQuizUpload(new File(["không phải json"], "de.json"));
 
@@ -99,6 +106,20 @@ describe("createQuizFromUpload", () => {
     });
 
     expect(result.ok).toBe(false);
+    expect(await Quiz.countDocuments()).toBe(0);
+  });
+
+  it("không lưu gì khi file là mảng rỗng", async () => {
+    const result = await createQuizFromUpload({
+      file: new File(["[]"], "de.json"),
+      title: "Python cơ bản",
+      slug: "python-co-ban",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "File không có câu hỏi nào hợp lệ nên chưa tạo được đề.",
+    });
     expect(await Quiz.countDocuments()).toBe(0);
   });
 

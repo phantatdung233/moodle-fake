@@ -14,6 +14,7 @@ import {
 import type { QuizQuestion } from "@/lib/quiz/quiz.model";
 import {
   createDraftQuizFromQuestions,
+  NO_QUESTIONS_ERROR,
   type CreateDraftQuizResult,
 } from "@/lib/quiz/repository";
 
@@ -59,6 +60,11 @@ export async function previewQuizUpload(
 
   try {
     const { questions, stats, errors } = parseQuizJson(raw);
+    // A well-formed array with nothing usable parses cleanly; reject it here so
+    // the preview says so, and the data layer enforces the same rule.
+    if (questions.length === 0) {
+      return { ok: false, error: NO_QUESTIONS_ERROR };
+    }
     return { ok: true, questions, stats, errors };
   } catch (error) {
     // The parser rejects a non-array top level with a Vietnamese TypeError.

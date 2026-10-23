@@ -130,6 +130,38 @@ describe("createDraftQuizFromQuestions", () => {
     expect(result).toEqual({ ok: false, error: "Tên đề không được để trống." });
     expect(await Quiz.countDocuments()).toBe(0);
   });
+
+  it("từ chối đề không có câu hỏi nào và không lưu gì", async () => {
+    const result = await createDraftQuizFromQuestions({
+      title: "Python cơ bản",
+      slug: "python-co-ban",
+      questions: [],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "File không có câu hỏi nào hợp lệ nên chưa tạo được đề.",
+    });
+    expect(await Quiz.countDocuments()).toBe(0);
+  });
+
+  it("chỉ một trong hai lần tạo đồng thời cùng slug thành công", async () => {
+    const { questions } = moodleExport();
+
+    // Both uploads pass the title/slug checks before either insert lands, so
+    // only the unique index can keep `/q/<slug>` from being claimed twice.
+    const results = await Promise.all([
+      createDraftQuizFromQuestions({ title: "Bản A", slug: "dong-thoi", questions }),
+      createDraftQuizFromQuestions({ title: "Bản B", slug: "dong-thoi", questions }),
+    ]);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.find((result) => !result.ok)).toEqual({
+      ok: false,
+      error: "Slug “dong-thoi” đã được dùng cho đề khác. Hãy chọn slug khác.",
+    });
+    expect(await Quiz.countDocuments()).toBe(1);
+  });
 });
 
 describe("listQuizzes", () => {
