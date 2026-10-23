@@ -4,14 +4,8 @@
  * `getCachedExplanation(hash)` là seam mà route handler (`/api/explain`) và
  * trang tổng kết dùng để hiện giải thích có sẵn mà không gọi Gemini.
  */
-import mongoose from "mongoose";
 import { ExplanationCache } from "./explanation.model";
-import { connectToDatabase } from "@/lib/db";
-
-async function ensureConnection(): Promise<void> {
-  if (mongoose.connection.readyState === 1) return;
-  await connectToDatabase();
-}
+import { ensureConnection } from "@/lib/mongodb";
 
 /**
  * The explanation stored for this `Question.hash`, or `null` when Gemini has

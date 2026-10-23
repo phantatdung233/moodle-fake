@@ -8,16 +8,7 @@ import mongoose from "mongoose";
 import { Quiz, type QuizMode, type QuizQuestion, type QuizStatus } from "./quiz.model";
 import { Attempt } from "./attempt.model";
 import { isValidQuizSlug, SLUG_FORMAT_ERROR } from "./slug";
-import { connectToDatabase } from "@/lib/db";
-
-/**
- * Tests connect Mongoose to mongodb-memory-server themselves, so a live
- * connection is reused as-is; only a cold process reads MONGODB_URI.
- */
-async function ensureConnection(): Promise<void> {
-  if (mongoose.connection.readyState === 1) return;
-  await connectToDatabase();
-}
+import { ensureConnection, isDuplicateKeyError } from "@/lib/mongodb";
 
 export type CreateDraftQuizInput = {
   title: string;
@@ -30,14 +21,6 @@ export const NO_QUESTIONS_ERROR = "File không có câu hỏi nào hợp lệ n�
 export type CreateDraftQuizResult =
   | { ok: true; quizId: string; slug: string }
   | { ok: false; error: string };
-
-function isDuplicateKeyError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    (error as { code?: number }).code === 11000
-  );
-}
 
 /**
  * Persists a new draft Quiz embedding every parsed Question — including the

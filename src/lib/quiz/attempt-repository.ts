@@ -14,12 +14,7 @@ import {
 } from "./attempt.model";
 import { gradeAnswer, gradeAttempt, type BlankGrade, type AttemptAnswer } from "./grading";
 import { Quiz, type QuizDocument, type QuizMode, type QuizQuestion } from "./quiz.model";
-import { connectToDatabase } from "@/lib/db";
-
-async function ensureConnection(): Promise<void> {
-  if (mongoose.connection.readyState === 1) return;
-  await connectToDatabase();
-}
+import { ensureConnection, isDuplicateKeyError } from "@/lib/mongodb";
 
 /** MSSV identity: uppercase + trimmed, so " b2012345 " and "B2012345" are one student. */
 export function normalizeStudentId(raw: string): string {
@@ -327,10 +322,6 @@ export async function revealQuestion(input: {
       ...(grade.perBlank ? { perBlank: grade.perBlank } : {}),
     },
   };
-}
-
-function isDuplicateKeyError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { code?: number }).code === 11000;
 }
 
 export type SubmitResult =

@@ -10,12 +10,7 @@
 import mongoose from "mongoose";
 import { Quiz, type QuizMode } from "./quiz.model";
 import { isValidQuizSlug, SLUG_FORMAT_ERROR } from "./slug";
-import { connectToDatabase } from "@/lib/db";
-
-async function ensureConnection(): Promise<void> {
-  if (mongoose.connection.readyState === 1) return;
-  await connectToDatabase();
-}
+import { ensureConnection, isDuplicateKeyError } from "@/lib/mongodb";
 
 export const QUIZ_NOT_FOUND_ERROR = "Không tìm thấy đề.";
 export const NOT_DRAFT_ERROR = "Đề đã publish nên không sửa được nữa. Hãy huỷ publish nếu cần sửa.";
@@ -173,10 +168,6 @@ export const TITLE_REQUIRED_ERROR = "Tên đề không được để trống.";
 export const SLUG_REQUIRED_ERROR = "Slug không được để trống.";
 export const TIME_LIMIT_ERROR = "Thời gian làm bài phải là số phút nguyên, lớn hơn 0.";
 export const MAX_ATTEMPTS_ERROR = "Số lần làm phải là số nguyên, lớn hơn 0.";
-
-function isDuplicateKeyError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { code?: number }).code === 11000;
-}
 
 /**
  * The giảng viên's edits on a draft: title, slug, mode, timeLimit,

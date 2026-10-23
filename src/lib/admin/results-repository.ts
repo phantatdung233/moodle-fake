@@ -14,12 +14,7 @@ import mongoose from "mongoose";
 import { Attempt, type AttemptDocument, type AttemptStatus } from "@/lib/quiz/attempt.model";
 import { Quiz, type QuizMode, type QuizQuestion } from "@/lib/quiz/quiz.model";
 import { normalizeStudentId } from "@/lib/quiz/attempt-repository";
-import { connectToDatabase } from "@/lib/db";
-
-async function ensureConnection(): Promise<void> {
-  if (mongoose.connection.readyState === 1) return;
-  await connectToDatabase();
-}
+import { ensureConnection } from "@/lib/mongodb";
 
 /** How many rows the table renders at once; the CSV export has no such cap. */
 export const RESULTS_PAGE_SIZE = 200;

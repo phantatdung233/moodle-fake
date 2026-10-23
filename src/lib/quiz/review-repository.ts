@@ -9,16 +9,7 @@
 import mongoose from "mongoose";
 import { Quiz, type QuizDocument, type QuizQuestion } from "./quiz.model";
 import { withRecomputedHash } from "./question-hash";
-import { connectToDatabase } from "@/lib/db";
-
-/**
- * Tests connect Mongoose to mongodb-memory-server themselves, so a live
- * connection is reused as-is; only a cold process reads MONGODB_URI.
- */
-async function ensureConnection(): Promise<void> {
-  if (mongoose.connection.readyState === 1) return;
-  await connectToDatabase();
-}
+import { ensureConnection } from "@/lib/mongodb";
 
 /**
  * The next Question the giảng viên still has to answer, in Moodle order
