@@ -118,6 +118,12 @@ function normalizeQuestion(
   if (type === "multichoice" && options.length === 0) {
     errors.push({ questionId: id, reason: "Câu multichoice không có lựa chọn nào" });
   }
+  if (type === "multichoice" && !options.some((option) => option.correct)) {
+    errors.push({
+      questionId: id,
+      reason: "Câu multichoice không có đáp án đúng nào được chọn (selected)",
+    });
+  }
   if (type === "multianswer" && blanks.length === 0) {
     errors.push({ questionId: id, reason: "Câu multianswer không có ô trống nào" });
   }
@@ -164,7 +170,11 @@ function hashQuestion(
 ): string {
   const payload = JSON.stringify({
     content,
-    options: options.map((option) => ({ key: option.key, correct: option.correct })),
+    options: options.map((option) => ({
+      key: option.key,
+      text: option.text,
+      correct: option.correct,
+    })),
     blanks: blanks.map((blank) => ({ name: blank.name, acceptedAnswer: blank.acceptedAnswer })),
   });
   return createHash("sha256").update(payload).digest("hex");
