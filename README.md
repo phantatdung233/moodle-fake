@@ -14,7 +14,9 @@ nhập MSSV + họ tên, mỗi màn một câu, tự lưu, xem đáp án tức t
 đề + chế độ thi**: sửa đề nháp, publish (chốt đề), huỷ publish, lưu trữ, thi có
 đồng hồ đếm ngược, nộp bài và trang tổng kết (`/q/<slug>/ket-qua`), và **giải
 thích Gemini streaming** sau mỗi câu (`POST /api/explain`, cache theo
-`Question.hash`), và **quản trị kết quả** (`/admin/results`): bảng mọi lượt làm
+`Question.hash`), **duyệt đáp án** ở `/admin/quizzes/<id>/review` (chỉ hiện lại
+giải thích đã cache; nút **Giải thích bằng AI** mới gọi model lần nữa, qua
+`POST /api/admin/explain`), và **quản trị kết quả** (`/admin/results`): bảng mọi lượt làm
 có lọc theo đề/MSSV, xuất CSV, reset lượt của một sinh viên trong một đề, và
 trang chi tiết từng câu **theo snapshot** của bài đã làm.
 
@@ -283,6 +285,11 @@ draft ──publish──▶ published ──archive──▶ archived (trạng 
   không được lệch với snapshot của sinh viên.
 - **Lưu trữ** chỉ từ `published`, là trạng thái cuối: đề biến khỏi `/`, không sửa
   được nữa, nhưng kết quả cũ vẫn xem được qua `/q/<slug>/ket-qua`.
+- **Xoá đề nháp** chỉ có ở trang đề `draft`: hộp thoại xác nhận rồi xoá hẳn đề
+  cùng giải thích AI đã sinh *của đề đó* (`ExplanationCache` theo hash). Server
+  kiểm tra lại trạng thái trong chính câu lệnh xoá, nên đề vừa publish ở tab khác
+  bị từ chối: “Chỉ xoá được đề nháp. Đề đã publish hoặc đã lưu trữ phải giữ lại để
+  lượt làm cũ còn đọc được.”
 
 ### Lớp dữ liệu vòng đời (`src/lib/quiz/lifecycle-repository.ts`)
 
@@ -292,13 +299,27 @@ draft ──publish──▶ published ──archive──▶ archived (trạng 
 - `unpublishQuiz(quizId)`, `archiveQuiz(quizId)` → `{ ok: true } | { ok: false, error }`.
 - `updateQuizSettings(quizId, { title, slug, mode, timeLimit, maxAttempts })`.
 - `saveQuestionSelection(quizId, { questionId, enabled })`.
+- `deleteDraftQuiz(quizId)` — xoá đề `draft` (từ chối mọi trạng thái khác bằng
+  `DELETE_NOT_DRAFT_ERROR`) và các `ExplanationCache` mà chỉ đề đó dùng.
 - Hằng số lỗi: `NOT_DRAFT_ERROR`, `NOT_PUBLISHED_ERROR`, `NOT_ARCHIVED_ERROR`,
   `ARCHIVED_TERMINAL_ERROR`, `NO_READY_QUESTIONS_ERROR`,
-  `UNPUBLISH_HAS_ATTEMPTS_ERROR`, `TIME_LIMIT_ERROR`, `MAX_ATTEMPTS_ERROR`…
+  `UNPUBLISH_HAS_ATTEMPTS_ERROR`, `DELETE_NOT_DRAFT_ERROR`, `TIME_LIMIT_ERROR`,
+  `MAX_ATTEMPTS_ERROR`…
 
 Server actions (`src/lib/admin/lifecycle-actions.ts`, đều kiểm tra phiên admin):
 `saveQuizSettings`, `toggleQuestion`, `publishQuizAction`, `unpublishQuizAction`,
-`archiveQuizAction`.
+`archiveQuizAction`, `deleteQuizAction`. Mọi module action admin dùng chung
+`withAdminAction(handler)` (`src/lib/admin/with-admin.ts`): trả lỗi phiên hết hạn
+bằng tiếng Việt thay vì để lộ lỗi DB, và vẫn để `redirect()`/`notFound()` của Next
+đi qua nguyên vẹn.
+
+### Duyệt đáp án (`/admin/quizzes/<id>/review`)
+
+Mỗi lần một câu cần duyệt, đúng thứ tự Moodle; lưu đáp án → câu kế tiếp.
+`?tab=ready` mở lại danh sách câu đã có đáp án (chỉ khi đề còn nháp). Nội dung
+câu dùng **cùng renderer** với sinh viên (`QuestionContent`), nên placeholder
+`[[n]]` nằm đúng vị trí trong chữ và trong code; ở đây ô trống là nhãn chỉ đọc.
+Mọi ghi đều kiểm tra lại `status: draft` ở server.
 
 ## Giải thích bằng Gemini (`src/lib/gemini/`, `/api/explain`)
 
@@ -319,11 +340,18 @@ chỉ viết lời giải thích (tiếng Việt, ngắn), và được yêu c�
   `ExplanationCache` khi stream xong; lỗi/trống thì **không** cache để lần sau
   sinh lại. Truyền `client` (`ExplainClient = { stream(prompt): AsyncIterable<string> }`)
   để test bằng fake model và đếm số lần gọi.
-- `getStoredExplanation({ hash })` / `getCachedExplanation(hash)` → `string | null`
-  — chỉ đọc cache; trang tổng kết (ticket sau) dùng để hiện lại giải thích có sẵn.
-- `EXPLANATION.notConfigured` (“Chưa cấu hình Gemini”) và
-  `EXPLANATION.unavailable` (“Chưa cấu hình hoặc không dùng được Gemini”) nằm ở
-  `messages.ts` — file an toàn cho client, không kéo SDK vào bundle trình duyệt.
+- `getCachedExplanation(hash)` → `string | null` — **cửa đọc duy nhất** của
+  giải thích đã lưu (trang tổng kết, chi tiết lượt của admin, trang duyệt đáp án).
+  Cache hỏng/mất kết nối đọc thành “chưa có”, không làm hỏng màn làm bài.
+- Ghi giải thích: `ExplanationCache` upsert theo hash, **và** write-through vào
+  `Question.explanation` của mọi đề `draft`/`published` còn mang hash đó — giảng
+  viên thấy ngay lời giải thích trong chính document của đề.
+- `EXPLANATION.notConfigured` (“Chưa cấu hình Gemini”),
+  `EXPLANATION.unavailable` (“Chưa cấu hình hoặc không dùng được Gemini”, lỗi tạm
+  thời) và `EXPLANATION.modelUnavailable` (“Gemini không dùng được với cấu hình
+  hiện tại — kiểm tra GEMINI_API_KEY hoặc đổi GEMINI_MODEL”, lỗi key/quyền/model)
+  nằm ở `messages.ts` — file an toàn cho client, không kéo SDK vào bundle trình
+  duyệt. `explanationErrorFor(error)` phân loại lỗi SDK thành hai thông báo sau.
 - Model: `GEMINI_MODEL` (mặc định `gemini-2.5-flash`, `thinkingBudget: 0`). Nếu
   project Google chưa được cấp quyền 2.5 chỉ cần đổi biến này, không sửa code.
 
@@ -331,6 +359,18 @@ chỉ viết lời giải thích (tiếng Việt, ngắn), và được yêu c�
 `createdAt`): khoá là `Question.hash` (SHA-256 của nội dung + đáp án). Sinh viên
 thứ hai xem cùng câu → nhận cache, không gọi model. Giảng viên sửa đáp án →
 hash đổi → giải thích mới; `Attempt` cũ vẫn mang hash cũ nên đọc đúng bản cũ.
+
+**Trang tổng kết và bài đang làm**: giải thích đã cache được đọc **ở server**
+(`explanationsByHash` trong `AttemptView`) nên hiện ngay, không cần bấm gì và
+không gọi model; câu chưa có cache vẫn giữ nút **Giải thích bằng AI**.
+
+**Duyệt đáp án** (`/admin/quizzes/<id>/review`): mỗi câu có khối **Giải thích
+bằng AI** — hiện giải thích đã cache kèm dấu “đã có sẵn”, và nút **Sinh lại giải
+thích** chỉ gọi model khi giảng viên bấm. Không có suy luận tự động kiểu “đáp án
+này trông sai”: hệ thống không bao giờ tự gắn cờ một câu. Route
+`POST /api/admin/explain` (body `{ quizId, questionId }`) kiểm tra phiên admin,
+đọc câu từ đề đó, và stream đúng hợp đồng frame như `/api/explain` (`401` thiếu
+phiên, `404` câu không có trong đề — lỗi mềm, tiếng Việt).
 
 **Route** `POST /api/explain` (`runtime = "nodejs"`, `dynamic = "force-dynamic"`):
 body `{ questionId, questionHash? }`. Server tự lấy Question + câu trả lời từ
@@ -347,8 +387,11 @@ Trang này là nơi giảng viên nhìn cả lớp: **mọi** `Attempt` của **
 nhất trước, kể cả bài đang làm dở.
 
 - **Bảng**: MSSV, họ tên, đề (`/q/<slug>`), lượt thứ mấy, % điểm (`—` khi chưa
-  nộp), thời gian bắt đầu/nộp (giờ Việt Nam), trạng thái (**Đang làm** / **Đã
-  nộp** / **Hết giờ**). Mỗi dòng có **Chi tiết** và **Reset lượt**.
+  nộp), thời gian bắt đầu/nộp (giờ Việt Nam, `dd/MM/yyyy HH:mm`), trạng thái
+  (**Đang làm** / **Đã nộp** / **Hết giờ — nộp tự động**). Mỗi dòng có **Chi tiết**
+  và **Reset lượt**. Nhãn trạng thái và định dạng `%`/ngày đều lấy từ
+  `src/lib/admin/result-format.ts`, dùng chung cho bảng, CSV, trang chi tiết và
+  trang tổng kết của sinh viên (CSV và câu văn ngắn dùng “Hết giờ”).
 - **Lượt thứ mấy** đếm các `Attempt` cùng `(quizId, studentId)` có `startedAt` ≤
   lượt này — nên lịch sử làm lại hiện đủ 1, 2, 3…; reset mới xoá được lịch sử đó.
 - **Lọc**: chọn **Đề** (hoặc “Tất cả đề”) và gõ **MSSV** — khớp chính xác hoặc
@@ -394,7 +437,7 @@ câu** của bài đó — nội dung câu, đáp án sinh viên đã chọn/gõ
 
 - Đọc **`questionsSnapshot` của `Attempt`**, không đọc bản đề hiện tại — giảng
   viên giải thích đúng bản đề sinh viên đã làm (user stories 71–72).
-- Giải thích lấy từ cache theo `Question.hash` (`getStoredExplanation`) — trang
+- Giải thích lấy từ cache theo `Question.hash` (`getCachedExplanation`) — trang
   **không gọi Gemini**; câu chưa từng được giải thích hiện “Chưa có giải thích
   cho câu này.”.
 - Bài đang làm dở: chưa có điểm, chỉ hiện câu trả lời đã lưu.
@@ -422,10 +465,27 @@ Test của ticket này:
 - `src/lib/admin/snapshot-integrity.test.ts` — **toàn vẹn snapshot**: publish v1 →
   sinh viên làm → đề bị đóng băng → upload/publish v2 → chi tiết bài cũ **và**
   trang tổng kết của sinh viên vẫn hiện nội dung + giải thích của v1.
+- `src/lib/admin/result-format.test.ts` — nhãn trạng thái, `33,3%`, `dd/MM/yyyy`.
+- `src/lib/admin/with-admin.test.ts` — action admin thiếu phiên trả lỗi tiếng Việt.
+- `src/app/api/admin/explain/route.test.ts` — route “Giải thích bằng AI” với
+  **fake Gemini client** (`useTestGeminiClient`, chỉ có tác dụng khi
+  `NODE_ENV=test`): `401` thiếu phiên, `404` câu không có, sinh rồi cache, lỗi mô
+  hình ra thông báo tiếng Việt.
+- `src/app/admin/quizzes/[id]/review/page.test.tsx` +
+  `admin-explanation.test.tsx` — giải thích đã cache được truyền sẵn vào cây
+  props, nút chỉ hiện văn bản khi bấm.
+- `src/lib/quiz/lifecycle-repository.delete.test.ts` — xoá đề nháp, từ chối đề đã
+  publish, không xoá giải thích của đề khác.
 
 ### Smoke test thật (đã chạy)
 
-Ngoài test tự động, ticket này được chạy tay trên `next start` với mongod thật:
+Ngoài test tự động, ticket này được chạy tay trên `next start` với mongod thật.
+Bộ khung nằm ở `scripts/smoke-t9.ts` (seed/xoá database dùng-một-lần) và
+`scripts/smoke-t9-browser.ts` (Playwright + Chromium). Đây là **công cụ chạy tay
+tuỳ chọn cho lập trình viên** — không chạy trên CI, không phải một phần của
+`pnpm test`; hai file này cũng bị loại khỏi `tsc --noEmit` (`exclude` trong
+`tsconfig.json`) để không kéo `playwright` vào bước kiểm tra kiểu của app. Các
+bước đã chạy:
 
 1. Seed một database dùng-một-lần (`moodle_quiz_smoke_t9`): 2 đề published
    (practice + exam), 5 `Attempt` (đã nộp, sai, đang làm dở; có MSSV/họ tên chứa
@@ -465,7 +525,9 @@ src/app/                 App Router: / (danh sách đề đã publish), /q/[slug
                          /admin, /admin/login, /admin/quizzes/[id] (sửa đề + vòng đời),
                          /admin/results (bảng kết quả + lọc), /admin/results/[attemptId]
                          (chi tiết một lượt), /admin/results/export.csv (tải CSV),
-                         /api/explain (streaming giải thích)
+                         /admin/quizzes/[id]/review (duyệt đáp án + giải thích AI),
+                         /api/explain (streaming giải thích cho sinh viên),
+                         /api/admin/explain (streaming giải thích khi giảng viên bấm)
 src/components/ui/       shadcn/ui (preset radix-nova)
 src/components/quiz/     quiz-runner (client: trạng thái, lưu, panel, phản hồi, đồng hồ,
                          nộp bài), question-content + highlight (server: markdown, shiki, ảnh)
@@ -485,10 +547,14 @@ src/app/admin/results/   bảng kết quả, trang chi tiết lượt, route exp
 src/components/quiz/explanation-panel.tsx  panel “Giải thích bằng AI”
 src/lib/student/         session cookie sinh viên, server actions, answers (helper thuần),
                          feedback (câu chữ phản hồi), exam (helper trình bày trạng thái thi)
-src/lib/db.ts            kết nối Mongoose dùng chung
+src/lib/db.ts            kết nối Mongoose dùng chung (đọc MONGODB_URI)
+src/lib/mongodb.ts       ensureConnection + isDuplicateKeyError dùng chung cho mọi repository
 src/middleware.ts        chặn mọi /admin/** khi chưa có phiên hợp lệ
 src/test/                helper test: env, mongodb-memory-server
+src/lib/admin/with-admin.ts  withAdmin / withAdminAction: một cổng kiểm tra phiên admin
+src/lib/admin/result-format.ts  nhãn trạng thái + formatPercent/formatDate dùng chung
 scripts/seed.ts          CLI pnpm seed
+scripts/smoke-*          khung smoke chạy tay (Playwright), ngoài CI và ngoài typecheck
 ```
 
 ### Lớp dữ liệu Quiz (`src/lib/quiz/repository.ts`)
