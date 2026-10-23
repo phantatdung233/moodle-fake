@@ -133,6 +133,13 @@ function QuizCard({ quiz }: { quiz: QuizListItem }) {
           />
           <Stat label="Lượt làm" value={String(quiz.attemptCount)} />
         </dl>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/admin/quizzes/${quiz.id}/review`}>
+              {quiz.needsReviewCount > 0 ? "Duyệt đáp án" : "Xem lại đáp án"}
+            </Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

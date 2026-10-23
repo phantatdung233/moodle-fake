@@ -2,10 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { previewQuizUpload, uploadFileFromPayload } from "@/lib/admin/upload";
 import type { UploadFilePayload } from "@/lib/admin/upload-file";
-import { ADMIN_SESSION_COOKIE, readAdminSession } from "@/lib/admin/session";
+import { hasAdminSession } from "@/lib/admin/session";
 import { createDraftQuizFromQuestions } from "@/lib/quiz/repository";
 import type { MoodleQuestionError, QuizParseStats } from "@/lib/quiz/parser";
 
@@ -54,15 +53,6 @@ function toPreview(
     needsReview: stats.needsReview,
     errors,
   };
-}
-
-/**
- * Middleware already blocks `/admin/**`, but a server action is reachable by
- * anyone who can POST to it, so the action that writes checks the session too.
- */
-async function hasAdminSession(): Promise<boolean> {
-  const cookieStore = await cookies();
-  return readAdminSession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value);
 }
 
 /**

@@ -5,7 +5,6 @@
  * value (no fs, no env, no DB) so the upload action, the review page, the seed
  * CLI and the tests all share one seam.
  */
-import { createHash } from "node:crypto";
 import type {
   QuestionStatus,
   QuestionType,
@@ -13,6 +12,7 @@ import type {
   QuizOption,
   QuizQuestion,
 } from "./quiz.model";
+import { hashQuestionAnswers } from "./question-hash";
 
 export type MoodleQuestionError = {
   questionId: string;
@@ -162,23 +162,12 @@ function initialStatus(
   return "needs_review";
 }
 
-/** Stable hash of content + answers; the giảng viên sửa đáp án → hash đổi → giải thích mới. */
-function hashQuestion(
-  content: string,
-  options: QuizOption[],
-  blanks: QuizBlank[],
-): string {
-  const payload = JSON.stringify({
-    content,
-    options: options.map((option) => ({
-      key: option.key,
-      text: option.text,
-      correct: option.correct,
-    })),
-    blanks: blanks.map((blank) => ({ name: blank.name, acceptedAnswer: blank.acceptedAnswer })),
-  });
-  return createHash("sha256").update(payload).digest("hex");
-}
+/**
+ * Stable hash of content + answers; the giảng viên sửa đáp án → hash đổi →
+ * giải thích mới. Kept in `question-hash` so the review page, which rewrites
+ * answers after upload, produces exactly the same hash as the parser.
+ */
+const hashQuestion = hashQuestionAnswers;
 
 function countStats(questions: QuizQuestion[]): QuizParseStats {
   const byType: Record<QuestionType, number> = { multichoice: 0, multianswer: 0 };
