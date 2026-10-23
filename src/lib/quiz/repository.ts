@@ -6,6 +6,7 @@
  */
 import mongoose from "mongoose";
 import { Quiz, type QuizMode, type QuizQuestion, type QuizStatus } from "./quiz.model";
+import { Attempt } from "./attempt.model";
 import { isValidQuizSlug, SLUG_FORMAT_ERROR } from "./slug";
 import { connectToDatabase } from "@/lib/db";
 
@@ -105,11 +106,7 @@ export type QuizListItem = {
   questionCount: number;
   readyCount: number;
   needsReviewCount: number;
-  /**
-   * No Attempt model exists yet (ticket #6), so every Quiz reports 0. When
-   * Attempt lands, count by `quizId` here — the field is already in the shape
-   * `/admin` renders.
-   */
+  /** Every Attempt ever started for this Quiz, finished or not. */
   attemptCount: number;
   createdAt: Date;
 };
@@ -122,6 +119,7 @@ export async function listQuizzes(): Promise<QuizListItem[]> {
     .select("title slug mode status questions createdAt")
     .sort({ createdAt: -1, _id: -1 })
     .lean();
+  const attemptCounts = await countAttemptsByQuiz();
 
   return quizzes.map((quiz) => {
     const questions = quiz.questions ?? [];
@@ -137,10 +135,17 @@ export async function listQuizzes(): Promise<QuizListItem[]> {
       questionCount: questions.length,
       readyCount: questions.length - needsReviewCount,
       needsReviewCount,
-      attemptCount: 0,
+      attemptCount: attemptCounts.get(String(quiz._id)) ?? 0,
       createdAt: quiz.createdAt,
     };
   });
+}
+
+async function countAttemptsByQuiz(): Promise<Map<string, number>> {
+  const grouped = await Attempt.aggregate<{ _id: mongoose.Types.ObjectId; count: number }>([
+    { $group: { _id: "$quizId", count: { $sum: 1 } } },
+  ]);
+  return new Map(grouped.map((row) => [String(row._id), row.count]));
 }
 
 export type QuizDetail = QuizListItem & {
@@ -175,7 +180,7 @@ export async function getQuizForAdmin(quizId: string): Promise<QuizDetail | null
     questionCount: questions.length,
     readyCount: questions.length - needsReviewCount,
     needsReviewCount,
-    attemptCount: 0,
+    attemptCount: await Attempt.countDocuments({ quizId: quiz._id }),
     createdAt: quiz.createdAt,
     version: quiz.version,
     publishedAt: quiz.publishedAt ?? null,
@@ -184,4 +189,56 @@ export async function getQuizForAdmin(quizId: string): Promise<QuizDetail | null
     multianswerCount: questions.filter((question) => question.type === "multianswer")
       .length,
   };
+}
+
+/**
+ * A Quiz the sinh viên can open at `/q/<slug>`.
+ *
+ * Ticket #8 adds the publish gate (`status: published` only); until then a
+ * draft is open so the flow can be demoed end to end.
+ */
+export type TestableQuiz = {
+  id: string;
+  title: string;
+  slug: string;
+  mode: QuizMode;
+  status: QuizStatus;
+  questionCount: number;
+};
+
+export async function getQuizBySlug(slug: string): Promise<TestableQuiz | null> {
+  await ensureConnection();
+
+  const quiz = await Quiz.findOne({ slug })
+    .select("title slug mode status questions")
+    .lean();
+  if (!quiz) return null;
+
+  return {
+    id: String(quiz._id),
+    title: quiz.title,
+    slug: quiz.slug,
+    mode: quiz.mode,
+    status: quiz.status,
+    questionCount: (quiz.questions ?? []).filter((question) => question.enabled).length,
+  };
+}
+
+/** Every Quiz the home page lists, newest first; archived ones are hidden. */
+export async function listTestableQuizzes(): Promise<TestableQuiz[]> {
+  await ensureConnection();
+
+  const quizzes = await Quiz.find({ status: { $ne: "archived" } })
+    .select("title slug mode status questions createdAt")
+    .sort({ createdAt: -1, _id: -1 })
+    .lean();
+
+  return quizzes.map((quiz) => ({
+    id: String(quiz._id),
+    title: quiz.title,
+    slug: quiz.slug,
+    mode: quiz.mode,
+    status: quiz.status,
+    questionCount: (quiz.questions ?? []).filter((question) => question.enabled).length,
+  }));
 }
