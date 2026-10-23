@@ -13,7 +13,7 @@ import {
   type AttemptStatus,
 } from "./attempt.model";
 import { gradeAnswer, gradeAttempt, type BlankGrade, type AttemptAnswer } from "./grading";
-import { Quiz, type QuizDocument, type QuizMode, type QuizQuestion } from "./quiz.model";
+import { Quiz, type QuizMode, type QuizQuestion } from "./quiz.model";
 import { ensureConnection, isDuplicateKeyError } from "@/lib/mongodb";
 
 /** MSSV identity: uppercase + trimmed, so " b2012345 " and "B2012345" are one student. */
@@ -261,7 +261,8 @@ export type RevealResult = { ok: true; feedback: RevealFeedback } | { ok: false;
 /**
  * Practice only: grades the saved answer with `gradeAnswer`, persists the
  * result on the Attempt (`revealed: true`) and locks the Question. The grading
- * is local; the Gemini explanation panel (ticket #9) hangs off this result.
+ * is local — the Gemini panel only explains the result, it never decides
+ * correct/incorrect.
  */
 export async function revealQuestion(input: {
   attemptId: string;
@@ -355,10 +356,9 @@ export async function submitAttempt(input: {
 
   const submittedAt = new Date();
   const expired = attempt.deadline !== undefined && attempt.deadline.getTime() <= submittedAt.getTime();
-  // `quiz.questions` must be the frozen snapshot: grading counts exactly the
-  // Questions the sinh viên saw, enabled or not (a published Quiz is all enabled).
+  // Grading counts exactly the Questions in this Attempt's frozen snapshot.
   const grade = gradeAttempt(
-    { ...toQuizForGrading(attempt.toObject()) },
+    attempt.questionsSnapshot,
     attempt.answers.map((answer) => ({
       questionId: answer.questionId,
       selectedOptionKeys: [...answer.selectedOptionKeys],
@@ -410,20 +410,6 @@ function gradedFor(entry: AttemptQuestionResult | undefined) {
     correct: entry.correct,
     score: entry.score,
     ...(entry.perBlank ? { perBlank: entry.perBlank.map((blank) => ({ ...blank })) } : {}),
-  };
-}
-
-/** Only the fields `gradeAttempt` reads; the snapshot stands in for `questions`. */
-function toQuizForGrading(attempt: AttemptDocument): QuizDocument {
-  return {
-    title: "",
-    slug: attempt.quizSlug,
-    mode: attempt.mode,
-    status: "published",
-    questions: attempt.questionsSnapshot,
-    version: attempt.quizVersion,
-    createdAt: attempt.createdAt,
-    updatedAt: attempt.updatedAt,
   };
 }
 

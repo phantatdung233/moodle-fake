@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parseQuizJson } from "./parser";
-import type { QuizDocument, QuizOption, QuizQuestion } from "./quiz.model";
+import type { QuizOption, QuizQuestion } from "./quiz.model";
 import { gradeAnswer, gradeAttempt, normalizeBlank } from "./grading";
 import type { AttemptAnswer } from "./grading";
 
@@ -199,22 +199,9 @@ function attemptAnswer(questionId: string, selectedOptionKeys: string[], blankVa
   return { questionId, selectedOptionKeys, blankValues };
 }
 
-function quiz(questions: QuizQuestion[]): QuizDocument {
-  return {
-    title: "Python cơ bản",
-    slug: "python-co-ban",
-    mode: "practice",
-    status: "published",
-    questions,
-    version: 1,
-    createdAt: new Date(0),
-    updatedAt: new Date(0),
-  };
-}
-
 describe("gradeAttempt on a whole Quiz", () => {
   it("answers every Question with a percentage total with one decimal place", () => {
-    const graded = gradeAttempt(quiz([realQuestion("Q001"), realQuestion("Q006"), realQuestion("Q031")]), [
+    const graded = gradeAttempt([realQuestion("Q001"), realQuestion("Q006"), realQuestion("Q031")], [
       attemptAnswer("Q001", ["e"], []),
       attemptAnswer("Q006", [], ["else:"]),
       attemptAnswer("Q031", [], ["(1, 9, 1, 6, 3, 4, 5, 1, 1, 2, 5, 6, 7, 8, 9, 2)", "(1, 9, 6, 3, 4, 5, 2, 7, 8)"]),
@@ -233,7 +220,7 @@ describe("gradeAttempt on a whole Quiz", () => {
       { ...multianswerQuestion, id: "Q902" },
     ];
 
-    const graded = gradeAttempt(quiz(questions), [
+    const graded = gradeAttempt(questions, [
       attemptAnswer("Q900", ["a"], []),
       attemptAnswer("Q902", [], ["else:", "and", "True"]),
     ]);
@@ -243,7 +230,7 @@ describe("gradeAttempt on a whole Quiz", () => {
   });
 
   it("keeps a Question left blank in the per-question results with a 0 score", () => {
-    const graded = gradeAttempt(quiz([realQuestion("Q001"), realQuestion("Q006")]), [
+    const graded = gradeAttempt([realQuestion("Q001"), realQuestion("Q006")], [
       attemptAnswer("Q001", ["e"], []),
     ]);
 
@@ -260,7 +247,7 @@ describe("gradeAttempt on a whole Quiz", () => {
   });
 
   it("reports which blanks of a multianswer Question were right, per Question", () => {
-    const graded = gradeAttempt(quiz([realQuestion("Q031")]), [
+    const graded = gradeAttempt([realQuestion("Q031")], [
       attemptAnswer("Q031", [], ["(1, 9, 1, 6, 3, 4, 5, 1, 1, 2, 5, 6, 7, 8, 9, 2)", "sai"]),
     ]);
 
@@ -289,7 +276,7 @@ describe("gradeAttempt on a whole Quiz", () => {
 
 describe("gradeAttempt when the sinh viên has not answered at all", () => {
   it("scores 0% and still lists every Question as wrong", () => {
-    const graded = gradeAttempt(quiz([realQuestion("Q001"), realQuestion("Q031")]), []);
+    const graded = gradeAttempt([realQuestion("Q001"), realQuestion("Q031")], []);
 
     expect(graded.total).toBe(0);
     expect(graded.perQuestion.map((question) => [question.questionId, question.score])).toEqual([
@@ -299,7 +286,7 @@ describe("gradeAttempt when the sinh viên has not answered at all", () => {
   });
 
   it("never crashes on a malformed answer: it is treated as blank", () => {
-    const graded = gradeAttempt(quiz([realQuestion("Q001"), realQuestion("Q031")]), [
+    const graded = gradeAttempt([realQuestion("Q001"), realQuestion("Q031")], [
       { questionId: "Q001" } as unknown as AttemptAnswer,
       attemptAnswer("Q031", [], [null as unknown as string]),
     ]);
@@ -309,7 +296,7 @@ describe("gradeAttempt when the sinh viên has not answered at all", () => {
   });
 
   it("shows an empty Quiz as 0%", () => {
-    expect(gradeAttempt(quiz([]), [])).toEqual({ total: 0, perQuestion: [] });
+    expect(gradeAttempt([], [])).toEqual({ total: 0, perQuestion: [] });
   });
 });
 
@@ -317,7 +304,7 @@ describe("gradeAttempt on a Quiz with Questions turned off", () => {
   it("only grades the enabled Questions, as the sinh viên only ever saw those", () => {
     const disabled = { ...realQuestion("Q031"), enabled: false };
 
-    const graded = gradeAttempt(quiz([realQuestion("Q001"), disabled]), [
+    const graded = gradeAttempt([realQuestion("Q001"), disabled], [
       attemptAnswer("Q001", ["e"], []),
       attemptAnswer("Q031", [], []),
     ]);

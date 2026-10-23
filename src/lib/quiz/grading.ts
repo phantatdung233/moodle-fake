@@ -5,7 +5,7 @@
  * bài (Spec, "Chấm điểm"): `gradeAnswer` chấm một Question, `gradeAttempt` chấm
  * cả lượt làm thành %.
  */
-import type { QuizDocument, QuizQuestion } from "./quiz.model";
+import type { QuizQuestion } from "./quiz.model";
 
 /** One blank inside a multianswer Question, so the UI can highlight the wrong ones. */
 export type BlankGrade = {
@@ -85,14 +85,22 @@ export function gradeAnswer(question: QuizQuestion, answer: unknown): AnswerGrad
   return gradeMultichoice(question, picked.selectedOptionKeys);
 }
 
-export function gradeAttempt(quiz: QuizDocument, answers: readonly AttemptAnswer[]): AttemptGrade {
+/**
+ * Grades a whole paper from its Questions alone. An Attempt passes its frozen
+ * `questionsSnapshot` here, so grading never reads the live Quiz (which may
+ * have been republished since the sinh viên started).
+ */
+export function gradeAttempt(
+  paper: readonly QuizQuestion[],
+  answers: readonly AttemptAnswer[],
+): AttemptGrade {
   const answersByQuestion = new Map(
     (Array.isArray(answers) ? answers : []).map((answer) => [answer.questionId, answer]),
   );
 
   // Every enabled Question counts, answered or not: leaving a Question blank
   // costs its points but still shows up as 0 in the results.
-  const questions = quiz.questions.filter((question) => question.enabled);
+  const questions = paper.filter((question) => question.enabled);
   const perQuestion: QuestionGrade[] = questions.map((question) => {
     const { score, correct, perBlank } = gradeAnswer(question, answersByQuestion.get(question.id));
     return perBlank

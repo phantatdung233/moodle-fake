@@ -25,7 +25,7 @@ export type AttemptQuestionResult = {
   perBlank?: BlankGrade[];
 };
 
-/** Filled in by `submitAttempt` (ticket #8); nil while the Attempt is in progress. */
+/** Filled in by `submitAttempt`; absent while the Attempt is in progress. */
 export type AttemptResult = {
   /** sum(score) / questionCount × 100, one decimal place. */
   total: number;

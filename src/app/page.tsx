@@ -10,9 +10,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * Home: the Quizzes a sinh viên can open. Ticket #8 tightens this to published
- * Quizzes only; until then a draft is listed (and labelled) so the practice
- * flow can be demoed from a fresh `pnpm seed`.
+ * Home: the published Quizzes a sinh viên can open. Drafts and archived Quizzes
+ * belong to the giảng viên and only appear under `/admin` (Spec, user story 24).
  */
 export default async function HomePage() {
   let quizzes: TestableQuiz[];
@@ -69,7 +68,6 @@ export default async function HomePage() {
                     <p className="text-sm text-muted-foreground">
                       {quiz.questionCount} câu ·{" "}
                       {quiz.mode === "practice" ? "Luyện tập" : "Kiểm tra"}
-                      {quiz.status === "draft" ? " · Bản nháp" : ""}
                     </p>
                   </CardContent>
                 </Card>
