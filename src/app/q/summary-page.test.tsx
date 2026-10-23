@@ -172,8 +172,27 @@ describe("summary page", () => {
     expect(html).toMatch(/Sai<\/dt>[\s\S]*?<dd[^>]*>0<\/dd>/);
     expect(html).toMatch(/Bỏ trống<\/dt>[\s\S]*?<dd[^>]*>4<\/dd>/);
     expect(html).toContain("đáp án đúng");
-    // Ticket #9's explanation panel renders once per Question (`client:` wrapper).
+    // One explanation panel per Question (`client:` wrapper).
     expect(html.match(/questionHash=/g)).toHaveLength(5);
+  });
+
+  it("câu đã có giải thích trong cache hiện sẵn trên trang tổng kết, không chờ Gemini", async () => {
+    const { saveExplanation } = await import("@/lib/gemini/cache");
+    const started = await resumeOrStartAttempt({ quizId, studentId: "B2012345", studentName: "An" });
+    if (!started.ok) throw new Error(started.error);
+    const q001 = started.attempt.questionsSnapshot.find((question) => question.id === "Q001")!;
+    await saveExplanation({
+      questionHash: q001.hash,
+      questionId: "Q001",
+      text: "In ra e vì biến e được gán trước khi gọi print.",
+    });
+    await submitAttempt({ attemptId: started.attempt.id, studentId: "B2012345" });
+    await signInAs("B2012345", started.attempt.id);
+
+    const html = render(await resolveTree(await SummaryPage({ params: Promise.resolve({ slug: "python-co-ban" }) })));
+    // The stored text travels in the panel's initialText, not in an empty shell.
+    expect(html).toContain("In ra e vì biến e được gán trước khi gọi print.");
+    expect(html).toContain("initialText");
   });
 
   it("đề luyện tập cho làm lại ngay trên trang tổng kết", async () => {
@@ -297,6 +316,24 @@ describe("quiz page after submitting", () => {
       ok: false,
       error: "Bạn đã hết 1 lần làm đề này.",
     });
+  });
+
+  it("câu đã xem đáp án ở lượt đang làm nhận sẵn giải thích từ cache", async () => {
+    const practiceId = await seedPublishedQuiz({ slug: "luyen-tap" });
+    const started = await resumeOrStartAttempt({ quizId: practiceId, studentId: "B1", studentName: "An" });
+    if (!started.ok) throw new Error(started.error);
+    const q001 = started.attempt.questionsSnapshot.find((question) => question.id === "Q001")!;
+    const questionHash = q001.hash;
+    const { saveExplanation } = await import("@/lib/gemini/cache");
+    await saveExplanation({ questionHash, questionId: "Q001", text: "Giải thích đã có sẵn." });
+    await signInAs("B1", started.attempt.id);
+
+    const { loadAttempt } = await import("@/lib/student/actions");
+    const attempt = await loadAttempt({ slug: "luyen-tap" });
+
+    // The runner reads `initialText` from this map, so a revealed Question
+    // opens with the stored text instead of an empty panel.
+    expect(attempt?.explanationsByHash?.[questionHash]).toBe("Giải thích đã có sẵn.");
   });
 
   it("bài đang làm dở vẫn mở màn hình làm bài, không chuyển trang", async () => {

@@ -7,6 +7,7 @@ import { getQuizBySlug } from "@/lib/quiz/repository";
 import {
   answerQuestion,
   getSummaryForStudent,
+  loadAttemptExplanations,
   resumeOrStartAttempt,
   revealQuestion,
   submitAttempt,
@@ -86,7 +87,8 @@ export async function loadAttempt(input: { slug: string }): Promise<AttemptView 
     studentId: identity.studentId,
   });
   if (!attempt || attempt.quizSlug !== input.slug || attempt.status !== "in_progress") return null;
-  return attempt;
+  // A practice Question revealed earlier opens with its text, not an empty panel.
+  return { ...attempt, explanationsByHash: await loadAttemptExplanations(attempt) };
 }
 
 /** The Attempt this browser owns for the Quiz, in any state; `null` for the identity form. */
@@ -99,7 +101,7 @@ export async function loadOwnedAttempt(input: { slug: string }): Promise<Attempt
     studentId: identity.studentId,
   });
   if (!attempt || attempt.quizSlug !== input.slug) return null;
-  return attempt;
+  return { ...attempt, explanationsByHash: await loadAttemptExplanations(attempt) };
 }
 
 /**

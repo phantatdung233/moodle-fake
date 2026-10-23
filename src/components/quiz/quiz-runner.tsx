@@ -438,6 +438,7 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerP
             questionId={question.id}
             questionHash={question.hash}
             mode="practice"
+            initialText={attempt.explanationsByHash?.[question.hash] ?? null}
           />
         ) : null}
       </main>

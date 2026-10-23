@@ -177,6 +177,7 @@ export function SummaryBody({
               grade={grade}
               selectedOptionKeys={answer?.selectedOptionKeys ?? []}
               blankValues={answer?.blankValues ?? []}
+              initialExplanation={attempt.explanationsByHash?.[question.hash] ?? null}
             />
           );
         })}

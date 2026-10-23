@@ -15,6 +15,7 @@ import {
 import { gradeAnswer, gradeAttempt, type BlankGrade, type AttemptAnswer } from "./grading";
 import { Quiz, type QuizMode, type QuizQuestion } from "./quiz.model";
 import { ensureConnection, isDuplicateKeyError } from "@/lib/mongodb";
+import { getCachedExplanation } from "@/lib/gemini/cache";
 
 /** MSSV identity: uppercase + trimmed, so " b2012345 " and "B2012345" are one student. */
 export function normalizeStudentId(raw: string): string {
@@ -37,6 +38,13 @@ export type AttemptView = {
   questionsSnapshot: QuizQuestion[];
   answers: AttemptDocument["answers"];
   result?: AttemptDocument["result"];
+  /**
+   * Gemini explanations already generated for this snapshot's Questions
+   * (`Question.hash` → text). Read from the cache by the page, so a Question
+   * explained before opens with its text instead of an empty panel; a hash
+   * missing here is simply "chưa có giải thích".
+   */
+  explanationsByHash?: Record<string, string>;
 };
 
 function toView(doc: AttemptDocument & { _id: mongoose.Types.ObjectId }): AttemptView {
@@ -67,6 +75,25 @@ function toView(doc: AttemptDocument & { _id: mongoose.Types.ObjectId }): Attemp
     })),
     ...(doc.result ? { result: doc.result } : {}),
   };
+}
+
+/**
+ * Cached explanations for every Question in the paper, keyed by `Question.hash`
+ * (Spec, user story 65). A cache failure returns `{}`: the page still renders,
+ * the panels just start empty and ask the model as before.
+ */
+export async function loadAttemptExplanations(
+  attempt: Pick<AttemptView, "questionsSnapshot">,
+): Promise<Record<string, string>> {
+  const hashes = [...new Set(attempt.questionsSnapshot.map((question) => question.hash))].filter(
+    Boolean,
+  );
+  const found: [string, string][] = [];
+  for (const hash of hashes) {
+    const text = await getCachedExplanation(hash);
+    if (text) found.push([hash, text]);
+  }
+  return Object.fromEntries(found);
 }
 
 export type StartAttemptInput = {
@@ -495,12 +522,17 @@ export async function getSummaryForStudent(
   const attemptsExhausted =
     quiz.mode === "exam" && maxAttempts !== undefined && finished.length >= maxAttempts;
 
+  const latest =
+    (attemptId ? attempts.find((attempt) => attempt.id === attemptId) : undefined) ?? finished[0] ?? null;
+
   return {
     quizId: String(quiz._id),
     quizSlug: quiz.slug,
     quizTitle: quiz.title,
     mode: quiz.mode,
-    latest: (attemptId ? attempts.find((attempt) => attempt.id === attemptId) : undefined) ?? finished[0] ?? null,
+    // Pre-rendered cached explanations, so a Question explained on an earlier
+    // Attempt opens with its text (Spec, user story 65).
+    latest: latest ? { ...latest, explanationsByHash: await loadAttemptExplanations(latest) } : null,
     history: finished,
     attemptCount: finished.length,
     ...(maxAttempts !== undefined ? { maxAttempts } : {}),

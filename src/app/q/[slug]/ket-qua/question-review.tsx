@@ -20,6 +20,12 @@ export type QuestionReviewProps = {
    * `null` means "nothing cached for this snapshot".
    */
   explanation?: string | null;
+  /**
+   * Cached text for the AI panel: the summary page reads the cache on the
+   * server, so a Question explained before renders with its text already there
+   * and the panel only asks the model when nothing is stored.
+   */
+  initialExplanation?: string | null;
 };
 
 /**
@@ -34,6 +40,7 @@ export function QuestionReview({
   selectedOptionKeys,
   blankValues,
   explanation,
+  initialExplanation = null,
 }: QuestionReviewProps) {
   const answered =
     selectedOptionKeys.length > 0 || blankValues.some((value) => value.trim() !== "");
@@ -149,15 +156,17 @@ export function QuestionReview({
         </ul>
       ) : null}
 
-      {/* Ticket #9: the explanation streams in under the graded answer, practice
-          or exam alike. A blank Question still shows the model's explanation.
-          The admin's attempt detail passes a stored explanation instead, so
-          reading an old paper never calls the model. */}
+      {/* The explanation sits under the graded answer, practice or exam alike.
+          A blank Question still gets one. Cached text comes from the server
+          (`initialExplanation`), so a Question explained before never flashes
+          empty; the admin's attempt detail passes a stored explanation instead
+          of the panel, so reading an old paper never calls the model. */}
       {explanation === undefined ? (
         <ExplanationPanel
           questionId={question.id}
           questionHash={question.hash}
           mode="summary"
+          initialText={initialExplanation}
         />
       ) : (
         <div className="flex flex-col gap-1 rounded-lg border bg-muted/20 p-4 text-sm">
