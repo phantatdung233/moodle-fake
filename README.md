@@ -4,12 +4,13 @@ Web app tiếng Việt cho sinh viên làm bài trắc nghiệm Python xuất t�
 giảng viên duyệt lại đáp án trước khi publish. Spec đầy đủ: GitHub issue #1
 (bản sao trong `.scratch/moodle-quiz-platform/spec.md`).
 
-Ticket hiện tại (Ticket 4) gồm: khung Next.js 15 App Router, đăng nhập admin
+Ticket hiện tại (Ticket 6) gồm: khung Next.js 15 App Router, đăng nhập admin
 (`/admin/login`, cookie httpOnly), middleware chặn `/admin/**`, **upload file
 Moodle JSON → đề nháp** với màn hình preview (số câu theo loại, số câu cần duyệt,
 lỗi parse), danh sách đề ở `/admin`, **parser thuần** biến file Moodle thành
-`Question` chuẩn hoá (`src/lib/quiz/parser.ts`), và **module chấm điểm thuần**
-(`src/lib/quiz/grading.ts`).
+`Question` chuẩn hoá (`src/lib/quiz/parser.ts`), **module chấm điểm thuần**
+(`src/lib/quiz/grading.ts`), và **luồng sinh viên luyện tập** (`/`, `/q/<slug>`):
+nhập MSSV + họ tên, mỗi màn một câu, tự lưu, xem đáp án tức thì.
 
 ## Yêu cầu
 
@@ -48,7 +49,7 @@ Tên database mặc định: `moodle_quiz`.
 |---|---|
 | `MONGODB_URI` | Chuỗi kết nối MongoDB, vd `mongodb://127.0.0.1:27017/moodle_quiz`. Prod dùng Atlas. |
 | `ADMIN_PASSWORD` | Mật khẩu đăng nhập `/admin` (một tài khoản admin duy nhất). |
-| `SESSION_SECRET` | Bí mật HMAC để ký cookie phiên admin. Tạo bằng `openssl rand -hex 32`. |
+| `SESSION_SECRET` | Bí mật HMAC ký cookie phiên admin **và** cookie danh tính sinh viên. Tạo bằng `openssl rand -hex 32`. |
 | `GEMINI_API_KEY` | Key Google Gemini cho phần giải thích (chưa dùng ở ticket này). |
 | `GEMINI_MODEL` | Model Gemini dùng để sinh giải thích. Mặc định `gemini-2.5-flash` khi để trống. |
 
@@ -85,7 +86,7 @@ Chạy lại khi slug `python-co-ban` đã tồn tại thì seed dùng `python-c
   chối bằng thông báo tiếng Việt, không ghi gì vào DB.
 - Slug trùng cũng bị từ chối; preview vẫn hiện để chỉ cần sửa slug.
 - `/admin` liệt kê mọi đề: tên, slug, chế độ, trạng thái, số câu, số câu cần duyệt
-  và số lượt làm. Chưa có model `Attempt` nên số lượt làm luôn là 0.
+  và số lượt làm (số `Attempt` của đề, mọi trạng thái).
 
 ### Parser (`src/lib/quiz/parser.ts`)
 
@@ -133,14 +134,92 @@ type AttemptAnswer = {
   không bỏ dấu tiếng Việt. Câu trả lời rỗng/sai cấu trúc được coi là bỏ trống
   (0 điểm), không ném lỗi.
 
+## Sinh viên làm bài (`/`, `/q/<slug>`)
+
+1. Trang chủ `/` liệt kê các đề đang có (ticket #8 sẽ giới hạn còn đề `published`;
+   hiện tại đề nháp cũng hiện, có nhãn "Bản nháp", để demo ngay sau `pnpm seed`).
+2. Bấm vào đề → `/q/<slug>`: nếu trình duyệt chưa có danh tính cho đề này thì hiện
+   form **MSSV + họ tên** (không mật khẩu). Gửi form sẽ **tiếp tục** bài đang làm
+   dở của MSSV đó nếu có, ngược lại tạo `Attempt` mới.
+3. Mỗi màn một câu, hiện "Câu n/180", nút **Câu trước / Câu sau** và panel
+   **Danh sách câu** để nhảy tới câu bất kỳ. Ô trong panel tô màu: đã trả lời,
+   chưa trả lời, đã khoá.
+4. Trả lời được **lưu ngay**: chọn option lưu tức thì, gõ ô trống thì debounce
+   (~600 ms) và luôn flush trước khi chuyển câu / xem đáp án / đóng tab. Góc phải
+   trên hiện "Đang lưu…" / "Đã lưu".
+5. Chế độ luyện tập có nút **Xem đáp án**: server chấm bằng `gradeAnswer`, trả về
+   đúng/sai, option đúng, từng ô trống đúng/sai kèm đáp án đúng. Câu đó **bị khoá**
+   ngay sau khi xem; sửa tiếp sẽ nhận lỗi từ server (`saveAnswer` từ chối).
+6. Nội dung câu: chương trình Python được tô màu cú pháp (shiki, render ở server —
+   grammar không vào bundle trình duyệt), chữ thường qua Markdown đã sanitize,
+   ô trống nằm **đúng vị trí `[[n]]`** kể cả khi nằm trong code, và ảnh đính kèm
+   (Q020, Q114) được hiển thị.
+
+### Danh tính sinh viên
+
+Cookie `student_session` riêng (không dùng chung với cookie admin):
+`<payload>.<HMAC-SHA256>` qua `src/lib/auth/token.ts`, `httpOnly`,
+`SameSite=Lax`, `Secure` khi production, hạn 30 ngày. Payload chỉ có
+`{ studentId, attemptId, iat }`; **cookie chỉ là gợi ý** — mọi lần đọc/ghi
+(`src/lib/quiz/attempt-repository.ts`) đều kiểm tra lại `Attempt.studentId`
+khớp MSSV trong cookie, nên đoán/đổi `attemptId` không mở được bài của người khác.
+
+### Model `Attempt` (`src/lib/quiz/attempt.model.ts`)
+
+```ts
+type Attempt = {
+  studentId: string;        // MSSV đã chuẩn hoá: trim + uppercase
+  studentName: string;
+  quizId: ObjectId;
+  quizSlug: string;
+  quizVersion: number;
+  mode: "practice" | "exam";
+  status: "in_progress" | "submitted" | "expired";
+  startedAt: Date;
+  submittedAt?: Date;
+  deadline?: Date;          // exam + timeLimit
+  questionsSnapshot: QuizQuestion[]; // chốt đề tại lúc bắt đầu
+  answers: (AttemptAnswer & { revealed: boolean; graded?: { correct, score, perBlank? } })[];
+  result?: { total: number; perQuestion: …[] };
+};
+```
+
+Partial unique index trên `(studentId, quizId)` với `status: "in_progress"`:
+mỗi sinh viên chỉ có **một** bài đang làm cho mỗi đề; hai tab bấm cùng lúc thì
+tab thua đọc lại bài đã tạo. Làm lại sau khi nộp (ticket #8) sẽ tạo `Attempt` mới.
+
+### Lớp dữ liệu Attempt (`src/lib/quiz/attempt-repository.ts`)
+
+- `resumeOrStartAttempt({ quizId, studentId, studentName })` →
+  `{ ok: true, attempt, resumed } | { ok: false, error }` — điểm vào duy nhất.
+- `getAttemptForStudent(attemptId, studentId)` → `AttemptView | null` — sai chủ
+  thì `null`.
+- `getOpenAttempt(quizId, studentId)` → `AttemptView | null`.
+- `answerQuestion({ attemptId, studentId, questionId, selectedOptionKeys, blankValues })`
+  → `{ ok: true } | { ok: false, error }` — chặn câu đã xem đáp án.
+- `revealQuestion({ attemptId, studentId, questionId })` →
+  `{ ok: true, feedback } | { ok: false, error }` — chỉ chế độ luyện tập.
+- `normalizeStudentId(raw)`, `NOT_YOUR_ATTEMPT_ERROR`, `REVEALED_LOCKED_ERROR`,
+  `QUESTION_NOT_FOUND_ERROR`.
+
+Server actions cho trình duyệt (`src/lib/student/actions.ts`):
+`beginAttempt`, `loadAttempt`, `saveAnswer`, `revealAnswer`, `forgetStudent`.
+
 ## Cấu trúc
 
 ```
-src/app/                 App Router: trang chủ, /admin, /admin/login, /admin/quizzes/[id]
+src/app/                 App Router: / (danh sách đề), /q/[slug] (làm bài),
+                         /admin, /admin/login, /admin/quizzes/[id]
 src/components/ui/       shadcn/ui (preset radix-nova)
+src/components/quiz/     quiz-runner (client: trạng thái, lưu, panel, phản hồi),
+                         question-content + highlight (server: markdown, shiki, ảnh)
+src/lib/auth/token.ts    HMAC token dùng chung cho cookie admin và sinh viên
 src/lib/admin/           mật khẩu admin, session cookie, server actions login/logout/upload,
                          upload.ts (đọc file + preview, gọi parser)
-src/lib/quiz/            model Quiz (Mongoose), parser Moodle, repository (tạo/đọc Quiz), slug
+src/lib/quiz/            model Quiz + Attempt, parser Moodle, grading, repository,
+                         attempt-repository, content/splitPlaceholders, markdown, slug
+src/lib/student/         session cookie sinh viên, server actions, answers (helper thuần),
+                         feedback (câu chữ phản hồi)
 src/lib/db.ts            kết nối Mongoose dùng chung
 src/middleware.ts        chặn mọi /admin/** khi chưa có phiên hợp lệ
 src/test/                helper test: env, mongodb-memory-server
@@ -158,9 +237,15 @@ Mongoose document):
 - `listQuizzes()` → `QuizListItem[]` cho `/admin` (số câu, ready/needs_review, lượt làm).
 - `getQuizForAdmin(id)` → `QuizDetail | null` cho `/admin/quizzes/[id]`
   (`null` khi id sai hoặc không tồn tại).
+- `getQuizBySlug(slug)` → `TestableQuiz | null` cho `/q/<slug>`.
+- `listTestableQuizzes()` → `TestableQuiz[]` cho trang chủ.
 
 ## Ghi chú
 
 - UI tiếng Việt cứng, tối ưu mobile; không có i18n.
-- Cookie phiên admin là `<issuedAt>.<HMAC-SHA256>` ký bằng `SESSION_SECRET`,
-  `httpOnly`, `SameSite=Lax`, `Secure` khi production.
+- Cookie phiên admin và cookie danh tính sinh viên là hai cookie khác nhau, cùng
+  định dạng `<payload>.<HMAC-SHA256>` ký bằng `SESSION_SECRET`, `httpOnly`,
+  `SameSite=Lax`, `Secure` khi production.
+- Khi test component `.tsx` bằng Vitest, file test dùng `renderToStaticMarkup`
+  (xem `src/components/quiz/question-content.test.tsx`); `@vitejs/plugin-react`
+  lo phần JSX vì `tsconfig` giữ JSX cho Next.
