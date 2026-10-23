@@ -4,10 +4,11 @@ Web app tiếng Việt cho sinh viên làm bài trắc nghiệm Python xuất t�
 giảng viên duyệt lại đáp án trước khi publish. Spec đầy đủ: GitHub issue #1
 (bản sao trong `.scratch/moodle-quiz-platform/spec.md`).
 
-Ticket hiện tại (Ticket 2) gồm: khung Next.js 15 App Router, đăng nhập admin
+Ticket hiện tại (Ticket 3) gồm: khung Next.js 15 App Router, đăng nhập admin
 (`/admin/login`, cookie httpOnly), middleware chặn `/admin/**`, danh sách đề
-(đang rỗng), CLI `pnpm seed`, và **parser thuần** biến file Moodle thành
-`Question` chuẩn hoá (`src/lib/quiz/parser.ts`).
+(đang rỗng), CLI `pnpm seed`, **parser thuần** biến file Moodle thành
+`Question` chuẩn hoá (`src/lib/quiz/parser.ts`), và **module chấm điểm thuần**
+(`src/lib/quiz/grading.ts`).
 
 ## Yêu cầu
 
@@ -84,6 +85,34 @@ pnpm build      # production build
 
 Lần đầu chạy `pnpm test`, `mongodb-memory-server` tải binary `mongod` riêng
 (~80 MB) vào `node_modules/.cache/` — không cần mongod local đang chạy.
+
+### Chấm điểm (`src/lib/quiz/grading.ts`)
+
+Module thuần, không DB/HTTP/UI: dùng cho phản hồi tức thì ở chế độ luyện tập và
+điểm cuối cùng khi nộp bài.
+
+Hình dạng câu trả lời (Attempt lưu đúng shape này):
+
+```ts
+type AttemptAnswer = {
+  questionId: string;
+  selectedOptionKeys: string[]; // multichoice: key của option đã chọn
+  blankValues: string[];        // multianswer: theo vị trí, khớp Question.blanks
+};
+```
+
+- `gradeAnswer(question, answer)` → `{ correct, score, perBlank? }`.
+  `perBlank` chỉ có với `multianswer`: `{ name, acceptedAnswer, value, correct }`
+  cho từng ô, để UI tô đỏ ô sai và hiện đáp án đúng.
+- `gradeAttempt(quiz, answers)` → `{ total, perQuestion }`; `total` =
+  `sum(score) / số câu × 100`, làm tròn 1 chữ số thập phân. Câu không trả lời vẫn
+  có mặt với `score: 0`; câu `enabled: false` không được chấm.
+- `multichoice`: tập key chọn phải **trùng khít** tập key đúng (thứ tự/trùng lặp
+  không tính) → 1, ngược lại 0.
+- `multianswer`: `số ô đúng / tổng số ô`, làm tròn 2 chữ số thập phân (2/3 → 0.67).
+- `normalizeBlank`: `trim`, gộp khoảng trắng liên tiếp thành 1, `lowercase`;
+  không bỏ dấu tiếng Việt. Câu trả lời rỗng/sai cấu trúc được coi là bỏ trống
+  (0 điểm), không ném lỗi.
 
 ## Cấu trúc
 

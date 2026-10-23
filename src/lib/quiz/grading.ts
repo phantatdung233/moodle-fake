@@ -5,12 +5,24 @@
  * bài (Spec, "Chấm điểm"): `gradeAnswer` chấm một Question, `gradeAttempt` chấm
  * cả lượt làm thành %.
  */
-import type { QuizQuestion } from "./quiz.model";
+import type { QuizDocument, QuizQuestion } from "./quiz.model";
 
 /** One blank inside a multianswer Question, so the UI can highlight the wrong ones. */
 export type BlankGrade = {
   name: string;
+  /** The giảng viên's accepted answer, so the UI can show what was expected. */
+  acceptedAnswer: string;
+  /** What the sinh viên typed, verbatim (empty when left blank). */
+  value: string;
   correct: boolean;
+};
+
+/** The shape Attempt.answers stores for one Question; later tickets must reuse it. */
+export type AttemptAnswer = {
+  questionId: string;
+  selectedOptionKeys: string[];
+  /** By position, aligned with Question.blanks (blankValues[0] answers blanks[0]). */
+  blankValues: string[];
 };
 
 export type AnswerGrade = {
@@ -19,6 +31,19 @@ export type AnswerGrade = {
   score: number;
   /** Every blank of a multianswer Question, right or wrong; absent for multichoice. */
   perBlank?: BlankGrade[];
+};
+
+export type QuestionGrade = {
+  questionId: string;
+  score: number;
+  correct: boolean;
+  perBlank?: BlankGrade[];
+};
+
+export type AttemptGrade = {
+  /** sum(score) / questionCount × 100, one decimal place. */
+  total: number;
+  perQuestion: QuestionGrade[];
 };
 
 function correctOptionKeys(question: QuizQuestion): Set<string> {
@@ -38,10 +63,15 @@ function gradeMultichoice(question: QuizQuestion, selectedOptionKeys: readonly s
 
 function gradeMultianswer(question: QuizQuestion, blankValues: readonly string[]): AnswerGrade {
   const total = question.blanks.length;
-  const perBlank: BlankGrade[] = question.blanks.map((blank, index) => ({
-    name: blank.name,
-    correct: normalizeBlank(blankValues[index] ?? "") === normalizeBlank(blank.acceptedAnswer),
-  }));
+  const perBlank: BlankGrade[] = question.blanks.map((blank, index) => {
+    const value = blankValues[index] ?? "";
+    return {
+      name: blank.name,
+      acceptedAnswer: blank.acceptedAnswer,
+      value,
+      correct: normalizeBlank(value) === normalizeBlank(blank.acceptedAnswer),
+    };
+  });
   const correctCount = perBlank.filter((blank) => blank.correct).length;
   const score = total === 0 ? 0 : roundTo(correctCount / total, 2);
   return { correct: total > 0 && correctCount === total, score, perBlank };
@@ -55,7 +85,32 @@ export function gradeAnswer(question: QuizQuestion, answer: unknown): AnswerGrad
   return gradeMultichoice(question, picked.selectedOptionKeys);
 }
 
-/** Trim, gộp mọi khoảng trắng liên tiếp thành 1, lowercase. Không bỏ dấu tiếng Việt. */
+export function gradeAttempt(quiz: QuizDocument, answers: readonly AttemptAnswer[]): AttemptGrade {
+  const answersByQuestion = new Map(
+    (Array.isArray(answers) ? answers : []).map((answer) => [answer.questionId, answer]),
+  );
+
+  // Every enabled Question counts, answered or not: leaving a Question blank
+  // costs its points but still shows up as 0 in the results.
+  const questions = quiz.questions.filter((question) => question.enabled);
+  const perQuestion: QuestionGrade[] = questions.map((question) => {
+    const { score, correct, perBlank } = gradeAnswer(question, answersByQuestion.get(question.id));
+    return perBlank
+      ? { questionId: question.id, score, correct, perBlank }
+      : { questionId: question.id, score, correct };
+  });
+
+  const questionCount = perQuestion.length;
+  const sum = perQuestion.reduce((total, question) => total + question.score, 0);
+  const total = questionCount === 0 ? 0 : roundTo((sum / questionCount) * 100, 1);
+
+  return { total, perQuestion };
+}
+
+/**
+ * Trim, gộp mọi khoảng trắng liên tiếp thành 1, lowercase. Không bỏ dấu tiếng Việt
+ * (đáp án đa số là code Python, nên "Đúng" và "dung" là hai đáp án khác nhau).
+ */
 export function normalizeBlank(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
