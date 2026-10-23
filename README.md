@@ -4,9 +4,10 @@ Web app tiếng Việt cho sinh viên làm bài trắc nghiệm Python xuất t�
 giảng viên duyệt lại đáp án trước khi publish. Spec đầy đủ: GitHub issue #1
 (bản sao trong `.scratch/moodle-quiz-platform/spec.md`).
 
-Ticket hiện tại (Ticket 1) gồm: khung Next.js 15 App Router, đăng nhập admin
+Ticket hiện tại (Ticket 2) gồm: khung Next.js 15 App Router, đăng nhập admin
 (`/admin/login`, cookie httpOnly), middleware chặn `/admin/**`, danh sách đề
-(đang rỗng) và CLI `pnpm seed`.
+(đang rỗng), CLI `pnpm seed`, và **parser thuần** biến file Moodle thành
+`Question` chuẩn hoá (`src/lib/quiz/parser.ts`).
 
 ## Yêu cầu
 
@@ -55,15 +56,31 @@ Next.js đọc `.env.local`; `pnpm seed` đọc `.env.local` rồi `.env`.
 
 ```bash
 pnpm dev        # http://localhost:3000, quản trị tại /admin
-pnpm seed       # đọc moodle_quiz_merged.json, in tổng số câu theo loại
+pnpm seed       # đọc moodle_quiz_merged.json, chạy parser, in thống kê + lỗi parse
 pnpm test       # Vitest (node), dùng mongodb-memory-server
 pnpm lint       # ESLint
 pnpm build      # production build
 ```
 
-`pnpm seed` hiện chỉ **đọc và kiểm tra** file Moodle rồi in tóm tắt
-(180 câu: 161 `multichoice`, 19 `multianswer`) và ping MongoDB. Việc lưu đề nháp
-diễn ra ở ticket parser.
+`pnpm seed` đọc file Moodle, chạy `parseQuizJson` rồi in tóm tắt (hiện tại:
+180 câu — 161 `multichoice`, 19 `multianswer`; 100 câu `needs_review`, 10 câu có
+ô trống chưa có đáp án, 88 lỗi parse) và ping MongoDB. Việc tạo đề nháp diễn ra
+ở ticket #4.
+
+### Parser (`src/lib/quiz/parser.ts`)
+
+`parseQuizJson(rawJson)` là module thuần: nhận JSON **đã** `JSON.parse`, không
+đọc file/env/DB, trả về `{ questions, stats, errors }`.
+
+- `options[].selected` → `options[].correct`; nhiều option đúng là hợp lệ.
+- `blanks[].value` → `blanks[].acceptedAnswer`.
+- `content` giữ nguyên, kể cả placeholder `[[n]]`; `images` giữ URL gốc.
+- `Question` là `needs_review` khi không có đáp án dùng được (multichoice không
+  có `selected: true`, multianswer có ô trống) hoặc nằm trong danh sách ID đáp
+  án rác đã biết (Q143, Q179) — parser **không tự bịa đáp án**.
+- `hash` = SHA-256 của nội dung + đáp án, dùng làm cache key của giải thích Gemini.
+- Một câu hỏng thành một entry trong `errors[]` (`{ questionId, reason }`, lý do
+  tiếng Việt); top-level không phải mảng thì ném `TypeError` tiếng Việt.
 
 Lần đầu chạy `pnpm test`, `mongodb-memory-server` tải binary `mongod` riêng
 (~80 MB) vào `node_modules/.cache/` — không cần mongod local đang chạy.
@@ -74,7 +91,7 @@ Lần đầu chạy `pnpm test`, `mongodb-memory-server` tải binary `mongod` r
 src/app/                 App Router: trang chủ, /admin, /admin/login
 src/components/ui/       shadcn/ui (preset radix-nova)
 src/lib/admin/           mật khẩu admin, session cookie, server actions login/logout
-src/lib/quiz/            model Quiz (Mongoose) và bước đọc/kiểm tra file Moodle
+src/lib/quiz/            model Quiz (Mongoose) và parser Moodle → Question chuẩn hoá
 src/lib/db.ts            kết nối Mongoose dùng chung
 src/middleware.ts        chặn mọi /admin/** khi chưa có phiên hợp lệ
 src/test/                helper test: env, mongodb-memory-server

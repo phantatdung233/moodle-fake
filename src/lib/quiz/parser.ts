@@ -128,7 +128,7 @@ function normalizeQuestion(
     errors.push({ questionId: id, reason: "Câu multianswer không có ô trống nào" });
   }
 
-  const status = initialStatus(id, type, options, blanks, errors);
+  const status = initialStatus(id, type, options, blanks);
   const question: QuizQuestion = {
     id,
     no: typeof entry.no === "number" ? entry.no : no,
@@ -149,7 +149,6 @@ function initialStatus(
   type: QuestionType,
   options: QuizOption[],
   blanks: QuizBlank[],
-  errors: MoodleQuestionError[],
 ): QuestionStatus {
   const isReady =
     type === "multichoice"
