@@ -38,12 +38,11 @@ function eventsOf(text: string): ExplanationStream {
   })();
 }
 
-function softError(message: string, shown: string[] = []): ExplainResult {
+function softError(message: string): ExplainResult {
   return {
     ok: false,
     error: message,
     stream: (async function* () {
-      for (const text of shown) yield { text };
       yield { error: message };
     })(),
   };
@@ -100,7 +99,13 @@ export async function explainQuestion(input: ExplainQuestionInput): Promise<Expl
   // Only the real path needs a key, so production behaves exactly as before.
   if (!input.client && apiKey.trim() === "") return softError(EXPLANATION.notConfigured);
 
-  const client = input.client ?? createGeminiClient(apiKey);
+  let client: ExplainClient;
+  try {
+    client = input.client ?? createGeminiClient(apiKey);
+  } catch {
+    // Constructing the SDK can fail on a malformed key: still a soft error.
+    return softError(EXPLANATION.unavailable);
+  }
 
   return {
     ok: true,
