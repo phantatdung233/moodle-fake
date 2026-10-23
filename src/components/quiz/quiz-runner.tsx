@@ -38,6 +38,7 @@ import {
   QuestionImages,
 } from "@/components/quiz/question-content";
 import { saveAnswer, revealAnswer } from "@/lib/student/actions";
+import { ExplanationPanel } from "@/components/quiz/explanation-panel";
 
 /** How long a text input waits before saving, so typing does not hit the DB per key. */
 const SAVE_DEBOUNCE_MS = 600;
@@ -332,9 +333,20 @@ export function QuizRunner({ attempt: initialAttempt }: QuizRunnerProps) {
                 {revealing ? "Đang chấm…" : "Xem đáp án"}
               </Button>
             ) : null}
-            {/* Ticket #9 renders the Gemini explanation panel here. */}
           </div>
         )}
+
+        {/* Practice only: the Question is revealed, so the explanation streams in
+            under the feedback. Exam mode never reveals here — its panel lives on
+            the summary page after submission. */}
+        {revealed && attempt.mode === "practice" ? (
+          <ExplanationPanel
+            key={question.id}
+            questionId={question.id}
+            questionHash={question.hash}
+            mode="practice"
+          />
+        ) : null}
       </main>
 
       <nav className="flex items-center justify-between gap-3 border-t pt-4">

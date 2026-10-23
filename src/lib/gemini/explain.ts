@@ -9,12 +9,9 @@
 import { buildExplanationPrompt, type ExplanationRequest } from "./prompt";
 import { getCachedExplanation, saveExplanation } from "./cache";
 import { createGeminiClient, getGeminiApiKey, type ExplainClient } from "./client";
+import { EXPLANATION } from "./messages";
 
-/** Thông báo lỗi mềm, hiện nguyên văn trên UI khi Gemini không dùng được. */
-export const EXPLANATION = {
-  notConfigured: "Chưa cấu hình Gemini",
-  unavailable: "Chưa cấu hình hoặc không dùng được Gemini",
-} as const;
+export { EXPLANATION } from "./messages";
 
 /**
  * One thing to show: a piece of text, or the soft error that interrupted it.
