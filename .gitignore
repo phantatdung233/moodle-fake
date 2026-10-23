@@ -27,4 +27,4 @@ coverage/
 next-env.d.ts
 
 # scraped data / local work
-.scratch/
+# .scratch/  # keep local (spec copy) — tracked
