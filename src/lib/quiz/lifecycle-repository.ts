@@ -21,6 +21,8 @@ export const NO_READY_QUESTIONS_ERROR =
   "Đề chưa có câu nào sẵn sàng để publish. Hãy duyệt đáp án hoặc bật ít nhất một câu đã có đáp án.";
 export const UNPUBLISH_HAS_ATTEMPTS_ERROR =
   "Đã có sinh viên làm đề này nên không huỷ publish được. Nếu muốn ẩn đề, hãy lưu trữ (archive).";
+export const DELETE_NOT_DRAFT_ERROR =
+  "Chỉ xoá được đề nháp. Đề đã publish hoặc đã lưu trữ phải giữ lại để lượt làm cũ còn đọc được.";
 
 /** A Question counts toward a published Quiz only when it is on and has an answer. */
 function isReadyForPublish(question: { enabled: boolean; status: string }): boolean {
@@ -103,6 +105,37 @@ export async function publishQuiz(quizId: string): Promise<PublishResult> {
 }
 
 export type LifecycleResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Deletes a draft Quiz for good — a draft never reached a sinh viên, so there
+ * is no Attempt or snapshot to protect. `published` / `archived` are refused:
+ * their Attempts still read the Quiz, so they may only be archived.
+ *
+ * The status is part of the delete filter, so a Quiz published in another tab
+ * between the check and the delete matches nothing instead of vanishing. The
+ * cached explanations of the removed Questions go with it; a hash shared with
+ * another Quiz stops matching anything, so leaving it would be dead weight.
+ */
+export async function deleteDraftQuiz(quizId: string): Promise<LifecycleResult> {
+  if (!mongoose.isValidObjectId(quizId)) return { ok: false, error: QUIZ_NOT_FOUND_ERROR };
+
+  await ensureConnection();
+
+  const quiz = await Quiz.findOne({ _id: quizId }).select("status questions.id questions.hash").lean();
+  if (!quiz) return { ok: false, error: QUIZ_NOT_FOUND_ERROR };
+  if (quiz.status !== "draft") return { ok: false, error: DELETE_NOT_DRAFT_ERROR };
+
+  const deleted = await Quiz.deleteOne({ _id: quizId, status: "draft" });
+  if (deleted.deletedCount === 0) return { ok: false, error: DELETE_NOT_DRAFT_ERROR };
+
+  const hashes = (quiz.questions ?? []).map((question) => question.hash).filter(Boolean);
+  if (hashes.length > 0) {
+    const { ExplanationCache } = await import("@/lib/gemini/explanation.model");
+    await ExplanationCache.deleteMany({ questionHash: { $in: hashes } });
+  }
+
+  return { ok: true };
+}
 
 /**
  * `published → draft`, only while nobody has started an Attempt — an Attempt

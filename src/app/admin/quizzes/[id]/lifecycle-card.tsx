@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Archive, Lock, RotateCcw, Send } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Archive, Lock, RotateCcw, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   archiveQuizAction,
+  deleteQuizAction,
   publishQuizAction,
   unpublishQuizAction,
 } from "@/lib/admin/lifecycle-actions";
@@ -33,6 +35,7 @@ export type QuizLifecycleCardProps = {
 export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const total = quiz.questions.length;
   const ready = quiz.questions.filter((row) => row.enabled && row.status === "ready").length;
@@ -42,13 +45,16 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
   const disabled = quiz.questions.filter((row) => !row.enabled).length;
   const dropped = total - ready;
 
-  function run(action: () => Promise<{ ok: boolean; error?: string }>) {
+  function run(
+    action: () => Promise<{ ok: boolean; error?: string }>,
+    afterSuccess: () => void = () => window.location.reload(),
+  ) {
     setError(null);
     startTransition(async () => {
       try {
         const result = await action();
         if (!result.ok) setError(result.error ?? "Không thực hiện được thao tác.");
-        else window.location.reload();
+        else afterSuccess();
       } catch {
         setError("Không thực hiện được thao tác. Kiểm tra kết nối rồi thử lại.");
       }
@@ -115,6 +121,12 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
               Chưa có câu nào sẵn sàng. Hãy duyệt đáp án hoặc bật ít nhất một câu đã có đáp án.
             </p>
           ) : null}
+
+          {/* The Quiz no longer exists, so the detail page cannot reload. */}
+          <DeleteDraftDialog
+            pending={pending}
+            onConfirm={() => run(() => deleteQuizAction(quiz.id), () => router.push("/admin"))}
+          />
         </>
       ) : null}
 
@@ -174,6 +186,40 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
         </p>
       ) : null}
     </div>
+  );
+}
+
+function DeleteDraftDialog({ pending, onConfirm }: { pending: boolean; onConfirm: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" className="self-start text-destructive" disabled={pending}>
+          <Trash2 /> Xoá đề nháp
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Xoá vĩnh viễn đề nháp này?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Đề, toàn bộ câu hỏi đã duyệt và giải thích AI đã sinh của đề sẽ bị xoá hẳn. Không hoàn
+            tác được. Đề đã publish thì không xoá được — hãy lưu trữ để lượt làm cũ còn đọc được.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Thôi</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-white hover:bg-destructive/90"
+            onClick={() => {
+              setOpen(false);
+              onConfirm();
+            }}
+          >
+            Xoá đề
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

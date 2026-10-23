@@ -98,6 +98,7 @@ describe("admin lifecycle actions", () => {
     expect(await adminActions.archiveQuizAction(quizId)).toEqual(noSession);
     expect(await adminActions.unpublishQuizAction(quizId)).toEqual(noSession);
     expect(await adminActions.toggleQuestion(quizId, "Q001", false)).toEqual(noSession);
+    expect(await adminActions.deleteQuizAction(quizId)).toEqual(noSession);
     expect(
       await adminActions.saveQuizSettings(quizId, {
         title: "Đổi",
@@ -118,6 +119,22 @@ describe("admin lifecycle actions", () => {
     expect(await adminActions.publishQuizAction(quizId)).toMatchObject({ ok: true });
 
     expect((await Quiz.findById(quizId).lean())?.status).toBe("published");
+  });
+
+  it("xoá đề nháp qua action, nhưng không xoá được đề đã publish", async () => {
+    const quizId = await seedQuiz();
+    await signInAsAdmin();
+
+    expect(await adminActions.deleteQuizAction(quizId)).toEqual({ ok: true });
+    expect(await Quiz.findById(quizId).lean()).toBeNull();
+
+    const publishedId = await seedQuiz("da-publish");
+    expect(await adminActions.publishQuizAction(publishedId)).toMatchObject({ ok: true });
+    expect(await adminActions.deleteQuizAction(publishedId)).toEqual({
+      ok: false,
+      error: "Chỉ xoá được đề nháp. Đề đã publish hoặc đã lưu trữ phải giữ lại để lượt làm cũ còn đọc được.",
+    });
+    expect(await Quiz.findById(publishedId).lean()).not.toBeNull();
   });
 });
 

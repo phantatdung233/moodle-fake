@@ -11,6 +11,7 @@ import { hasAdminSession } from "@/lib/admin/session";
 import { NO_SESSION_ERROR } from "@/lib/admin/review-messages";
 import {
   archiveQuiz,
+  deleteDraftQuiz,
   publishQuiz,
   saveQuestionSelection,
   unpublishQuiz,
@@ -110,4 +111,20 @@ export async function archiveQuizAction(quizId: string): Promise<LifecycleAction
   const result = await archiveQuiz(quizId);
   if (result.ok) revalidateQuiz(quizId);
   return result;
+}
+
+/**
+ * Deletes a draft Quiz, then sends the giảng viên back to the list: the page
+ * they were on no longer exists. Published / archived Quizzes are refused by
+ * the data layer.
+ */
+export async function deleteQuizAction(quizId: string): Promise<LifecycleActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: NO_SESSION_ERROR };
+
+  const result = await deleteDraftQuiz(quizId);
+  if (!result.ok) return result;
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { ok: true };
 }
