@@ -47,6 +47,7 @@ Tên database mặc định: `moodle_quiz`.
 | `ADMIN_PASSWORD` | Mật khẩu đăng nhập `/admin` (một tài khoản admin duy nhất). |
 | `SESSION_SECRET` | Bí mật HMAC để ký cookie phiên admin. Tạo bằng `openssl rand -hex 32`. |
 | `GEMINI_API_KEY` | Key Google Gemini cho phần giải thích (chưa dùng ở ticket này). |
+| `GEMINI_MODEL` | Model Gemini dùng để sinh giải thích. Mặc định `gemini-2.5-flash` khi để trống. |
 
 Next.js đọc `.env.local`; `pnpm seed` đọc `.env.local` rồi `.env`.
 
