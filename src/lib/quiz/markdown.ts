@@ -190,7 +190,8 @@ function toCodeLine(line: { text: string; blanks: { column: number; name: string
 /**
  * Markdown source for a block: prose as-is, code fenced as python. Blank
  * markers inside code stay `[[n]]` so the markdown renderer can place an input
- * there without the fence swallowing it.
+ * there without the fence swallowing it. Prose is left byte-for-byte alone;
+ * `screenProse` guards the markers when it is handed to markdown.
  */
 export function toMarkdown(blocks: readonly QuestionContentBlock[]): string {
   return blocks
@@ -202,4 +203,18 @@ export function toMarkdown(blocks: readonly QuestionContentBlock[]): string {
       return ["```" + block.language, body, "```"].join("\n");
     })
     .join("\n\n");
+}
+
+/**
+ * Prose for the markdown renderer, with `[[n]]` escaped (`\[\[n\]\]`): GFM would
+ * otherwise parse the marker as a wiki-style link and the input would land
+ * inside an `<a>`. `readMarkers` is the inverse, applied to text nodes.
+ */
+export function screenProse(text: string): string {
+  return text.replace(/\[\[(\d+)\]\]/g, "\\[\\[$1\\]\\]");
+}
+
+/** Undoes `screenProse` for one rendered text node. */
+export function readMarkers(text: string): string {
+  return text.replace(/\\\[\\\[(\d+)\\\]\\\]|\[\[(\d+)\]\]/g, (_, escaped: string, plain: string) => `[[${escaped ?? plain}]]`);
 }
