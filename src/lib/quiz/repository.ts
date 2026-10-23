@@ -6,6 +6,7 @@
  */
 import mongoose from "mongoose";
 import { Quiz, type QuizMode, type QuizQuestion, type QuizStatus } from "./quiz.model";
+import { isValidQuizSlug, SLUG_FORMAT_ERROR } from "./slug";
 import { connectToDatabase } from "@/lib/db";
 
 /**
@@ -26,26 +27,6 @@ export type CreateDraftQuizInput = {
 export type CreateDraftQuizResult =
   | { ok: true; quizId: string; slug: string }
   | { ok: false; error: string };
-
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const SLUG_FORMAT_ERROR =
-  "Slug chỉ gồm chữ thường, số và dấu gạch ngang (ví dụ: python-co-ban).";
-
-/** `Python cơ bản` → `python-co-ban`; the suggestion shown when the title is typed. */
-export function slugifyTitle(title: string): string {
-  return title
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-export function isValidQuizSlug(slug: string): boolean {
-  return SLUG_PATTERN.test(slug);
-}
 
 function isDuplicateKeyError(error: unknown): boolean {
   return (
