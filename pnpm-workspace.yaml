@@ -1,0 +1,11 @@
+# strictDepBuilds: false keeps `pnpm install` green when a new dependency ships a
+# build script; add packages that genuinely need one to `allowBuilds` instead.
+strictDepBuilds: false
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+  mongodb-memory-server: true
+  '@google/genai': true
+  protobufjs: true
+minimumReleaseAgeExclude:
+  - '@google/genai@2.31.0'
