@@ -2,8 +2,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import mongoose from "mongoose";
 import { parseQuizJson } from "../src/lib/quiz/parser";
+import { createDraftQuizFromQuestions } from "../src/lib/quiz/repository";
 
 const MOODLE_FILE = path.resolve(process.cwd(), "moodle_quiz_merged.json");
+const SEED_TITLE = "Python cơ bản";
+const SEED_SLUG = "python-co-ban";
 
 function readMoodleExport(): unknown {
   try {
@@ -17,13 +20,11 @@ function readMoodleExport(): unknown {
 }
 
 /**
- * `pnpm seed` — reads moodle_quiz_merged.json, runs the Moodle parser and prints
- * the stats the upload preview shows: Questions by type, how many still need the
- * giảng viên's answer, and every Question the parser could not grade.
- *
- * It does not persist a Quiz yet; creating the draft Quiz lands in ticket #4.
- * It does check that MongoDB is reachable, so a broken MONGODB_URI surfaces at
- * seed time rather than on the first page load.
+ * `pnpm seed` — reads moodle_quiz_merged.json, runs the Moodle parser, prints
+ * the stats the upload preview shows (Questions by type, how many still need
+ * the giảng viên's answer, every Question the parser could not grade) and
+ * creates one draft Quiz through the same data layer the admin upload uses, so
+ * a fresh checkout has something to open at `/admin`.
  */
 async function main() {
   const { questions, stats, errors } = parseQuizJson(readMoodleExport());
@@ -54,10 +55,45 @@ async function main() {
     }
   }
 
+  // Re-running the seed next to an existing "python-co-ban" picks a free slug
+  // instead of failing or overwriting the quiz the giảng viên may be editing.
+  const result = await createDraftQuizWithFreeSlug({
+    title: SEED_TITLE,
+    baseSlug: SEED_SLUG,
+    questions,
+  });
+
   console.log("");
   console.log(
-    `Chưa lưu Quiz nào (tạo đề nháp từ ${questions.length} Question đã parse ở ticket #4).`,
+    result.ok
+      ? `Đã tạo đề nháp "${SEED_TITLE}" tại /admin/quizzes/${result.quizId} (slug /q/${result.slug}).`
+      : `Không tạo được đề nháp: ${result.error}`,
   );
+  if (!result.ok) process.exitCode = 1;
+}
+
+async function createDraftQuizWithFreeSlug(input: {
+  title: string;
+  baseSlug: string;
+  questions: Parameters<typeof createDraftQuizFromQuestions>[0]["questions"];
+}) {
+  const result = await createDraftQuizFromQuestions({
+    title: input.title,
+    slug: input.baseSlug,
+    questions: input.questions,
+  });
+  if (result.ok) return result;
+
+  // The seed is idempotent-ish: a taken slug becomes `<base>-2`, `<base>-3`…
+  for (let suffix = 2; suffix <= 50; suffix += 1) {
+    const attempt = await createDraftQuizFromQuestions({
+      title: `${input.title} (${suffix})`,
+      slug: `${input.baseSlug}-${suffix}`,
+      questions: input.questions,
+    });
+    if (attempt.ok) return attempt;
+  }
+  return result;
 }
 
 main()
