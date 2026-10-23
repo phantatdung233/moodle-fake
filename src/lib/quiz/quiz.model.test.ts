@@ -3,11 +3,19 @@ import type { MongoMemoryServer } from "mongodb-memory-server";
 import { Quiz } from "./quiz.model";
 import { clearTestDatabase, startTestDatabase, stopTestDatabase } from "@/test/mongo";
 
+/** Waits for Mongoose's background index builds before a test asserts on uniqueness. */
+async function ensureIndexes(): Promise<void> {
+  await Promise.all([Quiz.init()]);
+}
+
 describe("Quiz model", () => {
   let server: MongoMemoryServer;
 
   beforeAll(async () => {
-    server = await startTestDatabase();
+    // Its own database: the default `test` database is shared with
+    // repository.test.ts, whose `clearTestDatabase` would drop this file's
+    // collections (and with them the unique slug index) mid-test.
+    server = await startTestDatabase("moodle_quiz_model_test");
   });
 
   afterAll(async () => {
@@ -19,6 +27,7 @@ describe("Quiz model", () => {
   });
 
   it("stores a draft Quiz whose Questions embed options and blanks", async () => {
+    await ensureIndexes();
     await Quiz.create({
       title: "Python cơ bản",
       slug: "python-co-ban",
@@ -60,6 +69,9 @@ describe("Quiz model", () => {
   it("refuses two Quizzes with the same slug", async () => {
     const base = { title: "Đề", slug: "trung-slug", mode: "exam" as const };
     await Quiz.create(base);
+    // Mongoose builds indexes in the background; wait for them so the second
+    // insert races the unique index itself, not its creation.
+    await ensureIndexes();
     await expect(Quiz.create(base)).rejects.toThrow();
   });
 });

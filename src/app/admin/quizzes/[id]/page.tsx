@@ -92,12 +92,19 @@ export default async function AdminQuizPage({ params }: Props) {
           </dl>
 
           <p className="mt-4 text-sm text-muted-foreground">
-            Duyệt đáp án, chọn câu và publish sẽ có ở các màn hình tiếp theo.
+            {quiz.needsReviewCount > 0
+              ? `Còn ${quiz.needsReviewCount} câu chưa có đáp án. Mở trang duyệt đáp án để trả lời từng câu.`
+              : "Mọi câu đang bật đã có đáp án."}
           </p>
         </CardContent>
       </Card>
 
-      <div className="mt-6">
+      <div className="mt-6 flex flex-wrap gap-2">
+        <Button asChild>
+          <Link href={`/admin/quizzes/${quiz.id}/review`}>
+            {quiz.needsReviewCount > 0 ? "Duyệt đáp án" : "Xem lại đáp án"}
+          </Link>
+        </Button>
         <Button asChild variant="outline">
           <Link href="/admin">Về danh sách đề</Link>
         </Button>
