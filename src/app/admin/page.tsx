@@ -53,11 +53,16 @@ export default async function AdminHomePage() {
             Upload file Moodle để tạo đề nháp, rồi duyệt đáp án trước khi publish.
           </p>
         </div>
-        <form action={logoutAdmin}>
-          <Button type="submit" variant="outline">
-            Đăng xuất
+        <div className="flex flex-wrap gap-2">
+          <form action={logoutAdmin}>
+            <Button type="submit" variant="outline">
+              Đăng xuất
+            </Button>
+          </form>
+          <Button asChild variant="outline">
+            <Link href="/admin/results">Kết quả sinh viên</Link>
           </Button>
-        </form>
+        </div>
       </header>
 
       <Card className="mb-8">

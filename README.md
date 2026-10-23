@@ -4,7 +4,7 @@ Web app tiếng Việt cho sinh viên làm bài trắc nghiệm Python xuất t�
 giảng viên duyệt lại đáp án trước khi publish. Spec đầy đủ: GitHub issue #1
 (bản sao trong `.scratch/moodle-quiz-platform/spec.md`).
 
-Đã có (đến Ticket 8): khung Next.js 15 App Router, đăng nhập admin
+Đã có (đủ spec ticket #1 → #9): khung Next.js 15 App Router, đăng nhập admin
 (`/admin/login`, cookie httpOnly), middleware chặn `/admin/**`, **upload file
 Moodle JSON → đề nháp** với màn hình preview (số câu theo loại, số câu cần duyệt,
 lỗi parse), danh sách đề ở `/admin`, **parser thuần** biến file Moodle thành
@@ -14,7 +14,35 @@ nhập MSSV + họ tên, mỗi màn một câu, tự lưu, xem đáp án tức t
 đề + chế độ thi**: sửa đề nháp, publish (chốt đề), huỷ publish, lưu trữ, thi có
 đồng hồ đếm ngược, nộp bài và trang tổng kết (`/q/<slug>/ket-qua`), và **giải
 thích Gemini streaming** sau mỗi câu (`POST /api/explain`, cache theo
-`Question.hash`).
+`Question.hash`), và **quản trị kết quả** (`/admin/results`): bảng mọi lượt làm
+có lọc theo đề/MSSV, xuất CSV, reset lượt của một sinh viên trong một đề, và
+trang chi tiết từng câu **theo snapshot** của bài đã làm.
+
+## Hướng dẫn nhanh (từ số 0 đến lúc sinh viên làm bài)
+
+```bash
+# 1. Cài đặt
+brew services start mongodb-community
+pnpm install
+cp .env.example .env.local      # sửa ADMIN_PASSWORD + SESSION_SECRET
+
+# 2. Chạy
+pnpm dev                        # http://localhost:3000
+
+# 3. Quản trị: http://localhost:3000/admin/login
+#    → upload moodle_quiz_merged.json → duyệt đáp án → publish
+
+# 4. Sinh viên: http://localhost:3000/ → chọn đề → nhập MSSV + họ tên
+#    → làm bài → Nộp bài → xem tổng kết + giải thích
+
+# 5. Giảng viên xem lớp: http://localhost:3000/admin/results
+#    → lọc → Xuất CSV → Chi tiết / Reset lượt
+
+# 6. Kiểm tra chất lượng
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
+```
+
+Hoặc nạp sẵn một đề nháp bằng `pnpm seed` (xem bên dưới) rồi mở `/admin`.
 
 ## Yêu cầu
 
@@ -313,25 +341,147 @@ lỗi mềm là `data: {"error":…}` với status `200` kèm header
 bài, `409` trang đã cũ (hash lệch) → panel nhắc tải lại. Client đọc bằng
 `readExplanationFrames()` (`fetch` + `ReadableStream` reader) và có nút **Thử lại**.
 
+## Kết quả sinh viên (`/admin/results`)
+
+Trang này là nơi giảng viên nhìn cả lớp: **mọi** `Attempt` của **mọi** đề, mới
+nhất trước, kể cả bài đang làm dở.
+
+- **Bảng**: MSSV, họ tên, đề (`/q/<slug>`), lượt thứ mấy, % điểm (`—` khi chưa
+  nộp), thời gian bắt đầu/nộp (giờ Việt Nam), trạng thái (**Đang làm** / **Đã
+  nộp** / **Hết giờ**). Mỗi dòng có **Chi tiết** và **Reset lượt**.
+- **Lượt thứ mấy** đếm các `Attempt` cùng `(quizId, studentId)` có `startedAt` ≤
+  lượt này — nên lịch sử làm lại hiện đủ 1, 2, 3…; reset mới xoá được lịch sử đó.
+- **Lọc**: chọn **Đề** (hoặc “Tất cả đề”) và gõ **MSSV** — khớp chính xác hoặc
+  chỉ cần **chứa** đoạn đã gõ, không phân biệt hoa thường (`b201` tìm ra
+  `B2012345`). Nút **Xoá lọc** hiện khi đang lọc.
+- Bảng giới hạn **200 dòng mới nhất** (`RESULTS_PAGE_SIZE`) và nói rõ “Chỉ hiện
+  200/N…”; file CSV **không** bị giới hạn, nên cứ thu hẹp bộ lọc để xem tiếp.
+  Mọi truy vấn đều có `limit` — trang không bao giờ kéo cả collection vào bộ nhớ.
+
+### Xuất CSV (`/admin/results/export.csv`)
+
+`GET /admin/results/export.csv?quizId=…&studentId=…` dùng **đúng** bộ lọc của
+bảng (nút **Xuất CSV** mang theo query string hiện tại):
+
+- `Content-Type: text/csv; charset=utf-8`, `Content-Disposition: attachment`;
+  tên file `ket-qua-<tên đề không dấu>-<ngày>.csv` (hoặc `ket-qua-tat-ca-de-…`
+  khi không lọc theo đề — dùng đúng slug của đề nếu có). Bắt đầu bằng **BOM UTF-8**
+  để Excel nhận đúng tiếng Việt.- Cột: `MSSV,Họ tên,Đề,Lượt,Điểm (%),Trạng thái,Bắt đầu,Nộp bài`; dấu phẩy, dấu
+  nháy kép (`"`, nhân đôi thành `""`) và xuống dòng đều được bọc nháy kép đúng
+  chuẩn RFC 4180. Điểm dùng dấu phẩy thập phân kiểu Việt Nam (`33,3`) nên luôn
+  được bọc nháy.
+- Route tự kiểm tra cookie admin (`401` nếu thiếu) — middleware chỉ là cổng UX;
+  phép kiểm tra thật nằm trong route và trong từng server action.
+
+### Reset lượt làm
+
+Nút **Reset lượt** (mỗi dòng) mở hộp thoại xác nhận ghi rõ **MSSV + tên + đề**.
+Xác nhận sẽ **xoá mọi `Attempt` của đúng sinh viên đó trong đúng đề đó** rồi
+`revalidatePath("/admin/results")`:
+
+- Van an toàn: xoá theo cặp `(studentId, quizId)` — không có đường nào xoá cả đề
+  hay cả lớp; lượt của sinh viên khác và đề khác không bị đụng tới.
+- Server action kiểm tra phiên admin lại lần nữa, không tin nút trên UI.
+- Sinh viên đó lại được làm từ lượt 1 (bộ đếm `maxAttempts` cũng được reset).
+  Lịch sử cũ **mất** khi bấm reset — đây là thao tác có chủ đích cho sự cố kỹ
+  thuật; muốn giữ lịch sử thì đừng reset, cứ để sinh viên làm lại.
+
+### Chi tiết một lượt (`/admin/results/[attemptId]`)
+
+Mở bằng **Chi tiết** ở bảng kết quả: hiện điểm, trạng thái, thời điểm, và **từng
+câu** của bài đó — nội dung câu, đáp án sinh viên đã chọn/gõ, đáp án đúng, từng
+ô trống đúng/sai với đáp án mong đợi, điểm từng câu, và **giải thích đã lưu**.
+
+- Đọc **`questionsSnapshot` của `Attempt`**, không đọc bản đề hiện tại — giảng
+  viên giải thích đúng bản đề sinh viên đã làm (user stories 71–72).
+- Giải thích lấy từ cache theo `Question.hash` (`getStoredExplanation`) — trang
+  **không gọi Gemini**; câu chưa từng được giải thích hiện “Chưa có giải thích
+  cho câu này.”.
+- Bài đang làm dở: chưa có điểm, chỉ hiện câu trả lời đã lưu.
+
+## Kiểm thử
+
+```bash
+pnpm test        # Vitest; MongoDB trong bộ nhớ (mongodb-memory-server)
+pnpm lint        # ESLint
+pnpm typecheck   # tsc --noEmit
+pnpm build       # production build (turbopack)
+```
+
+Test của ticket này:
+
+- `src/lib/admin/results-repository.test.ts` — bảng, lọc chính xác/chứa/hoa
+  thường, lượt thứ mấy, giới hạn 200, reset đúng cặp, chi tiết lượt.
+- `src/lib/admin/results-csv-export.test.ts` — bọc nháy, dấu phẩy, xuống dòng,
+  tên file; export cùng bộ lọc với bảng.
+- `src/app/admin/results/export.csv/route.test.ts` — `text/csv`, BOM, `401`.
+- `src/lib/admin/results-actions.test.ts` — reset cần phiên admin.
+- `src/app/admin/results/page.test.tsx`, `[attemptId]/page.test.tsx` — bảng, bộ
+  lọc, nút reset, trang chi tiết.
+- `src/lib/admin/attempt-detail.test.ts` — chi tiết dùng đúng snapshot.
+- `src/lib/admin/snapshot-integrity.test.ts` — **toàn vẹn snapshot**: publish v1 →
+  sinh viên làm → đề bị đóng băng → upload/publish v2 → chi tiết bài cũ **và**
+  trang tổng kết của sinh viên vẫn hiện nội dung + giải thích của v1.
+
+### Smoke test thật (đã chạy)
+
+Ngoài test tự động, ticket này được chạy tay trên `next start` với mongod thật:
+
+1. Seed một database dùng-một-lần (`moodle_quiz_smoke_t9`): 2 đề published
+   (practice + exam), 5 `Attempt` (đã nộp, sai, đang làm dở; có MSSV/họ tên chứa
+   dấu phẩy và nháy kép).
+2. Đăng nhập `/admin/login` bằng sai mật khẩu (báo “Mật khẩu không đúng.”) rồi
+   đúng; kiểm tra cookie `admin_session` là `httpOnly`.
+3. `/admin/results`: thấy đủ 5 dòng, điểm `33,3%`, dòng “Đang làm”; lọc
+   `studentId=b201` và lọc theo đề; **Xoá lọc**.
+4. **Xuất CSV**: tải file thật — có BOM, header tiếng Việt, đúng số dòng theo bộ
+   lọc, họ tên `Lê "Bình", lớp 2` được bọc `"Lê ""Bình"", lớp 2"`.
+5. Mở **Chi tiết** một lượt: đủ câu, đáp án đúng, ô trống, khối giải thích đã lưu.
+6. **Reset lượt** qua hộp thoại: đúng MSSV đó biến mất, sinh viên khác trong cùng
+   đề và đề khác của cùng sinh viên vẫn còn; trang `/q/<slug>` vẫn mở bình thường.
+7. Xoá database smoke (`dropDatabase`) sau khi xong.
+
+## Triển khai (Atlas + Vercel)
+
+1. Tạo cluster **Atlas** (M0 đủ dùng), Database Access một user chỉ đọc/ghi
+   database của app, Network Access mở cho Vercel (`0.0.0.0/0` hoặc IP Vercel).
+2. `MONGODB_URI` dạng `mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/moodle_quiz`
+   — nhớ tên database ở cuối URI.
+3. Trên Vercel đặt `MONGODB_URI`, `ADMIN_PASSWORD`, `SESSION_SECRET`
+   (`openssl rand -hex 32`), `GEMINI_API_KEY` (để trống nếu chưa muốn AI) và
+   `GEMINI_MODEL` (tuỳ chọn). **Không** commit `.env.local`.
+4. Deploy, mở `/admin/login`, upload đề → duyệt → publish.
+5. Cookie đặt `Secure` tự động khi `NODE_ENV=production` (Vercel luôn production),
+   nên phải dùng HTTPS — bản địa phương chạy `http://localhost:3000` vẫn OK.
+6. Mọi trang dữ liệu là `dynamic = "force-dynamic"`, không có bước migrate: thêm
+   trường mới vào schema Mongoose là xong (dữ liệu cũ đọc được với giá trị mặc
+   định).
+
 ## Cấu trúc
 
 ```
 src/app/                 App Router: / (danh sách đề đã publish), /q/[slug] (làm bài),
                          /q/[slug]/ket-qua (tổng kết + review từng câu),
-                         /admin, /admin/login, /admin/quizzes/[id] (sửa đề + vòng đời)
+                         /admin, /admin/login, /admin/quizzes/[id] (sửa đề + vòng đời),
+                         /admin/results (bảng kết quả + lọc), /admin/results/[attemptId]
+                         (chi tiết một lượt), /admin/results/export.csv (tải CSV),
+                         /api/explain (streaming giải thích)
 src/components/ui/       shadcn/ui (preset radix-nova)
 src/components/quiz/     quiz-runner (client: trạng thái, lưu, panel, phản hồi, đồng hồ,
                          nộp bài), question-content + highlight (server: markdown, shiki, ảnh)
 src/lib/auth/token.ts    HMAC token dùng chung cho cookie admin và sinh viên
 src/lib/admin/           mật khẩu admin, session cookie, server actions login/logout/upload,
                          lifecycle-actions (sửa đề, bật/tắt câu, publish/huỷ/lưu trữ),
-                         upload.ts (đọc file + preview, gọi parser)
+                         upload.ts (đọc file + preview, gọi parser),
+                         results-repository (bảng/filter/reset/chi tiết), results-csv
+                         (CSV thuần + tên file), results-csv-export, results-actions (reset)
 src/lib/quiz/            model Quiz + Attempt, parser Moodle, grading, repository,
                          lifecycle-repository, attempt-repository,
                          content/splitPlaceholders, markdown, slug
 src/lib/gemini/          prompt thuần, ExplainClient + SDK Gemini, ExplanationCache,
                          explainQuestion, đọc frame SSE, messages (dùng cho client)
 src/app/api/explain/     route handler streaming giải thích
+src/app/admin/results/   bảng kết quả, trang chi tiết lượt, route export CSV, nút reset
 src/components/quiz/explanation-panel.tsx  panel “Giải thích bằng AI”
 src/lib/student/         session cookie sinh viên, server actions, answers (helper thuần),
                          feedback (câu chữ phản hồi), exam (helper trình bày trạng thái thi)

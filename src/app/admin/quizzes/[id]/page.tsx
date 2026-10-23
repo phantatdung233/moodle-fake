@@ -190,6 +190,9 @@ export default async function AdminQuizPage({ params }: Props) {
           </Button>
         ) : null}
         <Button asChild variant="outline">
+          <Link href={`/admin/results?quizId=${quiz.id}`}>Xem kết quả đề này</Link>
+        </Button>
+        <Button asChild variant="outline">
           <Link href="/admin">Về danh sách đề</Link>
         </Button>
       </div>
