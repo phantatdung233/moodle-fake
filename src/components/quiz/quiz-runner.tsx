@@ -73,8 +73,6 @@ export type QuizRunnerProps = {
   attempt: AttemptView;
   /** Attempts the Quiz allows in exam mode; shown in the end-of-paper notice. */
   maxAttempts?: number;
-  /** Lessons every Question's explanation panel shows (ticket #9). */
-  lessons?: readonly string[];
 };
 
 /**
@@ -83,7 +81,7 @@ export type QuizRunnerProps = {
  * owns all client state and makes sure a debounced keystroke is flushed before
  * any navigation, before a reveal, and on page unload.
  */
-export function QuizRunner({ attempt: initialAttempt, maxAttempts, lessons = [] }: QuizRunnerProps) {
+export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerProps) {
   const router = useRouter();
   const questions = initialAttempt.questionsSnapshot;
   const [current, setCurrent] = useState(0);
@@ -261,7 +259,6 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts, lessons = [] 
   const progress = Math.round((done / questions.length) * 100);
   const graded = gradesOf(attempt, question.id);
 
-  const blocks = parseQuestionContent(splitPlaceholders(question.content, question.blanks.length));
   const blankIndex = blankIndexByName(question.blanks);
 
   function renderBlank(name: string): React.ReactNode {
@@ -361,7 +358,9 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts, lessons = [] 
           {revealed ? <Badge variant="secondary">Đã khoá</Badge> : null}
         </div>
 
-        <QuestionContent blocks={blocks} renderBlank={renderBlank} />
+        {/* The one renderer of a Question body: it parses `content` itself and
+            calls back for each `[[n]]` at the marker's exact position. */}
+        <QuestionContent content={question.content} blankCount={question.blanks.length} renderBlank={renderBlank} />
         <QuestionImages images={question.images} questionNo={question.no} />
 
         {question.options.length > 0 ? (
@@ -448,7 +447,6 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts, lessons = [] 
           Chế độ kiểm tra: đáp án và giải thích chỉ hiện sau khi nộp.
           {remaining !== null ? " Bài tự động nộp khi hết giờ." : ""}
           {maxAttempts !== undefined ? ` Bạn được làm tối đa ${maxAttempts} lần.` : ""}
-          {lessons.length > 0 ? ` Bài gồm ${lessons.join(", ")}.` : ""}
         </p>
       ) : null}
 

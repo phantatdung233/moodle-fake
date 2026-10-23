@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { splitPlaceholders } from "./content";
-import { parseQuestionContent, toMarkdown, type QuestionContentBlock } from "./markdown";
+import { parseQuestionContent, type QuestionContentBlock } from "./markdown";
 import { parseQuizJson } from "./parser";
 
 /**
@@ -30,20 +30,20 @@ function codeText(blocks: readonly QuestionContentBlock[]): string {
 }
 
 describe("rendering moodle_quiz_merged.json", () => {
-  it("fences Q006's program with its indentation intact and the blank on its own line", () => {
-    expect(toMarkdown(blocksFor("Q006"))).toBe(
-      [
-        "Điền … để in thông báo khi điều kiện sai:",
-        "",
-        "```python",
-        "i = 1",
-        "while i < 6:",
-        "    print(i)",
-        "    i += 1",
-        "[[1]]",
-        '    print("i is no longer less than 6")',
-        "```",
-      ].join("\n"),
+  it("puts Q006's whole program in one block, indentation intact, with the blank on its own line", () => {
+    const blocks = blocksFor("Q006");
+
+    expect(blocks.map((block) => block.kind)).toEqual(["markdown", "code"]);
+    expect(blocks[0]).toEqual({
+      kind: "markdown",
+      text: "Điền … để in thông báo khi điều kiện sai:",
+    });
+    // The blank is a `{ blank }` item of its own line, so the input lands where
+    // `[[1]]` was (after `i += 1`, before the final print).
+    expect(codeText(blocks)).toBe(
+      ["i = 1", "while i < 6:", "    print(i)", "    i += 1", "[[1]]", '    print("i is no longer less than 6")'].join(
+        "\n",
+      ),
     );
   });
 

@@ -257,18 +257,7 @@ export type TestableQuiz = {
   timeLimit?: number;
   maxAttempts?: number;
   version: number;
-  /** "Bài 1, Bài 2…" seen in the Question bodies, for the exam notice. */
-  lessons: string[];
 };
-
-/** Learning units the paper covers, e.g. ["Bài 1", "Bài 2"]; empty when unknown. */
-export function lessonLabels(contents: readonly string[]): string[] {
-  const found = new Set<string>();
-  for (const content of contents) {
-    for (const match of content.matchAll(/Bài\s+(\d+)/g)) found.add(`Bài ${match[1]}`);
-  }
-  return [...found].sort((a, b) => Number(a.slice(4)) - Number(b.slice(4)));
-}
 
 function toTestableQuiz(quiz: {
   _id: mongoose.Types.ObjectId;
@@ -279,7 +268,7 @@ function toTestableQuiz(quiz: {
   timeLimit?: number | null;
   maxAttempts?: number | null;
   version?: number;
-  questions?: { enabled: boolean; content?: string }[];
+  questions?: { enabled: boolean }[];
 }): TestableQuiz {
   const questions = quiz.questions ?? [];
   const enabled = questions.filter((question) => question.enabled).length;
@@ -291,9 +280,6 @@ function toTestableQuiz(quiz: {
     status: quiz.status,
     questionCount: enabled,
     version: quiz.version ?? 1,
-    lessons: lessonLabels(
-      questions.filter((question) => question.enabled).map((question) => question.content ?? ""),
-    ),
     ...(quiz.mode === "exam" && quiz.timeLimit != null ? { timeLimit: quiz.timeLimit } : {}),
     ...(quiz.mode === "exam" && quiz.maxAttempts != null ? { maxAttempts: quiz.maxAttempts } : {}),
   };
@@ -303,7 +289,7 @@ export async function getQuizBySlug(slug: string): Promise<TestableQuiz | null> 
   await ensureConnection();
 
   const quiz = await Quiz.findOne({ slug, status: "published" })
-    .select("title slug mode status timeLimit maxAttempts version questions.enabled questions.content")
+    .select("title slug mode status timeLimit maxAttempts version questions.enabled")
     .lean();
   return quiz ? toTestableQuiz(quiz) : null;
 }
@@ -327,7 +313,7 @@ export async function listTestableQuizzes(): Promise<TestableQuiz[]> {
   await ensureConnection();
 
   const quizzes = await Quiz.find({ status: "published" })
-    .select("title slug mode status timeLimit maxAttempts version questions")
+    .select("title slug mode status timeLimit maxAttempts version questions.enabled")
     .sort({ createdAt: -1, _id: -1 })
     .lean();
 

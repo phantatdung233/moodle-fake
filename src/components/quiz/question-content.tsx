@@ -2,22 +2,39 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import type { CodeLineItem, QuestionContentBlock } from "@/lib/quiz/markdown";
-import { readMarkers, screenProse } from "@/lib/quiz/markdown";
+import { parseQuestionContent, readMarkers, screenProse } from "@/lib/quiz/markdown";
+import { splitPlaceholders } from "@/lib/quiz/content";
 import { highlightLines } from "@/components/quiz/highlight";
 
 /**
  * Question content renderer.
  *
  * Server components on purpose: shiki bundles a TextMate grammar + theme for
- * Python, which must never reach the browser. The pure `parseQuestionContent`
- * has already decided what is prose and what is a program; this only draws it
- * and asks the interactivity layer for a blank input at each blank position.
+ * Python, which must never reach the browser. It is the one renderer of a
+ * Question body everywhere (student runner, summary, admin review): the pure
+ * `parseQuestionContent` decides what is prose and what is a program, and the
+ * interactivity layer supplies a blank input at each `[[n]]` position.
  */
 
 /** A blank input, supplied by the interactivity layer. */
 export type RenderBlank = (name: string) => React.ReactNode;
 
+/** Raw Moodle `content` + how many blanks it has; markers outside that range stay text. */
 export async function QuestionContent({
+  content,
+  blankCount,
+  renderBlank,
+}: {
+  content: string;
+  blankCount: number;
+  renderBlank: RenderBlank;
+}) {
+  const blocks = parseQuestionContent(splitPlaceholders(content, blankCount));
+  return <QuestionBlocks blocks={blocks} renderBlank={renderBlank} />;
+}
+
+/** Already-parsed blocks, for callers that built them for a non-blank reason. */
+export async function QuestionBlocks({
   blocks,
   renderBlank,
 }: {

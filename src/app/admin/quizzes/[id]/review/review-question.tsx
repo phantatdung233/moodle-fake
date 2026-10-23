@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { QuizQuestion } from "@/lib/quiz/quiz.model";
-import { renderQuestionContent } from "@/lib/quiz/question-content";
+import { QuestionContent, QuestionImages } from "@/components/quiz/question-content";
 import { reviewAnswer, reviewRemoveQuestion } from "@/lib/admin/review-actions";
 
 export type ReviewPageMode = "review" | "recheck";
@@ -136,7 +136,7 @@ export function ReviewQuestion({
               <span className="text-sm font-normal text-muted-foreground">
                 Câu {question.no} ·{" "}
                 {question.type === "multichoice" ? "Trắc nghiệm" : "Điền khuyết"} ·{" "}
-                {question.status === "needs_review" ? "Cần duyệt" : "Đã duyệt"}
+                {question.status === "needs_review" ? "Cần duyệt" : "Đã có đáp án"}
               </span>
             </CardTitle>
             <CardDescription>
@@ -146,7 +146,7 @@ export function ReviewQuestion({
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
-            <QuestionContent question={question} />
+            <ReviewedQuestionContent question={question} />
 
             {question.type === "multichoice" ? (
               <MultichoiceForm
@@ -327,37 +327,24 @@ function FinishedCard({
   );
 }
 
-/** Question text plus its images: code keeps its indentation, images show at a readable size. */
-function QuestionContent({ question }: { question: QuizQuestion }) {
-  const blocks = renderQuestionContent(question.content);
-
+/**
+ * The Question body exactly as a sinh viên sees it — the same renderer, so
+ * `[[n]]` markers sit at their real positions in prose and in code. Blanks are
+ * read-only here: the giảng viên edits the answers in the form below.
+ */
+function ReviewedQuestionContent({ question }: { question: QuizQuestion }) {
   return (
     <div className="flex flex-col gap-2 text-base">
-      <div className="flex flex-col gap-1">
-        {blocks.map((block, index) =>
-          block.kind === "code" ? (
-            <pre
-              key={index}
-              className="overflow-x-auto rounded-lg bg-muted px-3 py-2 font-mono text-sm leading-relaxed"
-            >
-              <code>{block.text}</code>
-            </pre>
-          ) : (
-            <p key={index} className="break-words">
-              {block.text}
-            </p>
-          ),
+      <QuestionContent
+        content={question.content}
+        blankCount={question.blanks.length}
+        renderBlank={(name) => (
+          <span className="mx-0.5 inline-block min-w-16 rounded border border-dashed border-input bg-muted px-2 text-center font-mono text-sm text-muted-foreground">
+            [[{name}]]
+          </span>
         )}
-      </div>
-      {question.images.map((src) => (
-        // eslint-disable-next-line @next/next/no-img-element -- Moodle URLs, no next.config allowlist.
-        <img
-          key={src}
-          src={src}
-          alt={`Hình của câu ${question.id}`}
-          className="max-h-80 w-auto max-w-full rounded-lg border"
-        />
-      ))}
+      />
+      <QuestionImages images={question.images} questionNo={question.no} />
     </div>
   );
 }
