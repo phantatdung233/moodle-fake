@@ -165,12 +165,3 @@ export async function explainQuestion(input: ExplainQuestionInput): Promise<Expl
 export function isGeminiConfigured(): boolean {
   return getGeminiApiKey() !== "";
 }
-
-/**
- * Explanation text for a Question from the cache only, or `null` (Spec story
- * 57/65): the summary page shows what was already generated without waking the
- * model. Shares the `Question.hash` key with `explainQuestion`.
- */
-export function getStoredExplanation(question: { hash: string }): Promise<string | null> {
-  return getCachedExplanation(question.hash);
-}

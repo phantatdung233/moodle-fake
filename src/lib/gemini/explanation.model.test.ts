@@ -53,4 +53,39 @@ describe("ExplanationCache", () => {
   it("bỏ qua chuỗi rỗng: không cache một giải thích không có nội dung", async () => {
     expect(await getCachedExplanation("")).toBeNull();
   });
+
+  it("ghi kèm vào Question.explanation của đề đang dùng hash đó (write-through, Spec)", async () => {
+    const { Quiz } = await import("@/lib/quiz/quiz.model");
+    const { hashQuestionAnswers } = await import("@/lib/quiz/question-hash");
+    const question = {
+      id: "Q001",
+      no: 1,
+      type: "multichoice" as const,
+      content: "print('a') in ra gì?",
+      options: [
+        { key: "a", text: "a", correct: true },
+        { key: "b", text: "b", correct: false },
+      ],
+      blanks: [],
+      images: [],
+      enabled: true,
+      status: "ready" as const,
+      hash: "",
+    };
+    const hash = hashQuestionAnswers(question.content, question.options, question.blanks);
+    const quiz = await Quiz.create({
+      title: "Đề",
+      slug: "de",
+      mode: "practice",
+      questions: [{ ...question, hash }],
+    });
+
+    await saveExplanation({ questionHash: hash, questionId: "Q001", text: "In ra a." });
+
+    expect((await Quiz.findById(quiz._id).lean())?.questions[0].explanation).toBe("In ra a.");
+    // A hash no Quiz carries (older answers) still lands in ExplanationCache only.
+    await saveExplanation({ questionHash: "hash-khong-co-de", questionId: "Q001", text: "Bản cũ" });
+    expect(await getCachedExplanation("hash-khong-co-de")).toBe("Bản cũ");
+    expect((await Quiz.findById(quiz._id).lean())?.questions[0].explanation).toBe("In ra a.");
+  });
 });
