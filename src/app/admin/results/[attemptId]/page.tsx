@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAttemptDetail, type AttemptDetail } from "@/lib/admin/results-repository";
+import { attemptStatusLabel, formatDate, formatPercent } from "@/lib/admin/result-format";
 import { gradeAnswer } from "@/lib/quiz/grading";
 import type { AttemptQuestionResult } from "@/lib/quiz/attempt.model";
 import { Button } from "@/components/ui/button";
@@ -16,12 +17,6 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ attemptId: string }> };
-
-const statusLabels: Record<AttemptDetail["status"], string> = {
-  in_progress: "Đang làm",
-  submitted: "Đã nộp",
-  expired: "Hết giờ — nộp tự động",
-};
 
 /**
  * `/admin/results/[attemptId]` — one Attempt as the giảng viên explains it back
@@ -88,7 +83,7 @@ export default async function AttemptDetailPage({ params }: Props) {
             <Badge
               variant={attempt.status === "expired" ? "destructive" : open ? "outline" : "secondary"}
             >
-              {statusLabels[attempt.status]}
+              {attemptStatusLabel(attempt.status)}
             </Badge>
           </CardTitle>
           <CardDescription>
@@ -145,14 +140,3 @@ export default async function AttemptDetailPage({ params }: Props) {
   );
 }
 
-function formatPercent(total: number): string {
-  return `${total.toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%`;
-}
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("vi-VN", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "Asia/Ho_Chi_Minh",
-  }).format(date);
-}

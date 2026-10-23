@@ -13,6 +13,7 @@ import type { AttemptView } from "@/lib/quiz/attempt-repository";
 import { exhaustedAttemptsError } from "@/lib/quiz/attempt-repository";
 import { loadSummary } from "@/lib/student/actions";
 import { summaryCounts } from "@/lib/student/exam";
+import { attemptStatusLabel, formatDate, formatPercent } from "@/lib/admin/result-format";
 import { QuestionReview } from "./question-review";
 
 export const metadata: Metadata = {
@@ -118,9 +119,9 @@ export function SummaryBody({
           <CardTitle className="flex flex-wrap items-center gap-2">
             Điểm: {formatPercent(counts.scorePercent)}
             {attempt.status === "expired" ? (
-              <Badge variant="destructive">Hết giờ — nộp tự động</Badge>
+              <Badge variant="destructive">{attemptStatusLabel("expired")}</Badge>
             ) : (
-              <Badge variant="secondary">Đã nộp</Badge>
+              <Badge variant="secondary">{attemptStatusLabel(attempt.status)}</Badge>
             )}
           </CardTitle>
           <CardDescription>
@@ -128,7 +129,7 @@ export function SummaryBody({
               ? `Nộp lúc ${formatDate(attempt.submittedAt)}`
               : "Bài đã được chấm."}
             {summary.history.length > 1
-              ? ` · ${attempt.status === "expired" ? "Hết giờ" : "Lần làm"} ${summary.history.length - summary.history.findIndex((entry) => entry.id === attempt.id)}/${summary.history.length}`
+              ? ` · ${attemptStatusLabel(attempt.status, "short")} ${summary.history.length - summary.history.findIndex((entry) => entry.id === attempt.id)}/${summary.history.length}`
               : ""}
           </CardDescription>
         </CardHeader>
@@ -193,7 +194,7 @@ export function SummaryBody({
                 <li key={entry.id} className="flex flex-wrap justify-between gap-2 rounded-lg border p-3">
                   <span>
                     {formatDate(entry.submittedAt ?? entry.startedAt)} ·{" "}
-                    {entry.status === "expired" ? "hết giờ" : "đã nộp"}
+                    {attemptStatusLabel(entry.status, "short")}
                   </span>
                   <span className="font-medium">{formatPercent(entry.result?.total ?? 0)}</span>
                 </li>
@@ -203,18 +204,6 @@ export function SummaryBody({
       ) : null}
     </div>
   );
-}
-
-function formatPercent(total: number): string {
-  return `${total.toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%`;
-}
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("vi-VN", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "Asia/Ho_Chi_Minh",
-  }).format(date);
 }
 
 function Stat({

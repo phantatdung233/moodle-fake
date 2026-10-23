@@ -94,8 +94,10 @@ describe("exportResultsCsv", () => {
     const row = (await exportResultsCsv({})).split("\r\n")[1];
 
     expect(row).toMatch(/^B1,An,/);
+    // Score is empty (no "%" in the CSV); "Nộp bài" is the last, empty column.
     expect(row).toContain(',1,,Đang làm,');
     expect(row.endsWith(",")).toBe(true);
+    expect(row).not.toContain("%");
   });
 
   it("giữ nguyên MSSV có số 0 ở đầu, không cho Excel nuốt mất", async () => {

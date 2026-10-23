@@ -6,6 +6,7 @@
  * UTF-8 BOM (added by the route) and correct quoting — so the format lives
  * here, away from the HTTP layer, and is tested on its own.
  */
+import { attemptStatusLabel, formatDate, formatPercent } from "./result-format";
 import type { ResultRow } from "./results-repository";
 
 export const CSV_HEADERS = [
@@ -19,38 +20,6 @@ export const CSV_HEADERS = [
   "Nộp bài",
 ] as const;
 
-const STATUS_LABELS: Record<ResultRow["status"], string> = {
-  in_progress: "Đang làm",
-  submitted: "Đã nộp",
-  expired: "Hết giờ",
-};
-
-/** `dd/MM/yyyy HH:mm` in Vietnam time — what a giảng viên reads in Excel. */
-export function formatCsvDate(date: Date | null): string {
-  if (!date) return "";
-  const parts = new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone: "Asia/Ho_Chi_Minh",
-  }).formatToParts(date);
-  const read = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? "";
-  return `${read("day")}/${read("month")}/${read("year")} ${read("hour")}:${read("minute")}`;
-}
-
-/** Percent with one decimal, using a comma so Vietnamese Excel reads a number. */
-export function formatCsvPercent(total: number | null): string {
-  if (total === null) return "";
-  return total.toLocaleString("vi-VN", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 1,
-  });
-}
-
 /**
  * One CSV field. Quoted only when needed (comma, quote, newline — or a leading
  * space/tab, which Excel would otherwise trim); inner quotes doubled.
@@ -60,6 +29,10 @@ export function csvField(value: string): string {
     return `"${value.replaceAll('"', '""')}"`;
   }
   return value;
+}
+
+function csvDate(date: Date | null): string {
+  return date ? formatDate(date) : "";
 }
 
 function csvLine(fields: readonly string[]): string {
@@ -75,10 +48,12 @@ export function toCsv(rows: readonly ResultRow[]): string {
         row.studentName,
         row.quizTitle,
         String(row.attemptNumber),
-        formatCsvPercent(row.scorePercent),
-        STATUS_LABELS[row.status],
-        formatCsvDate(row.startedAt),
-        formatCsvDate(row.submittedAt),
+        // Percent without the "%" sign: the column header carries it.
+        formatPercent(row.scorePercent).replace("%", "").replace("—", ""),
+        attemptStatusLabel(row.status, "csv"),
+        // CSV keeps blank cells blank; the `—` placeholder is for the UI only.
+        csvDate(row.startedAt),
+        csvDate(row.submittedAt),
       ]),
     );
   }

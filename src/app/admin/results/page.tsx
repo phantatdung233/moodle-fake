@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Download, Search } from "lucide-react";
 import { logoutAdmin } from "@/lib/admin/actions";
 import { listResults, RESULTS_PAGE_SIZE, type ResultRow } from "@/lib/admin/results-repository";
+import { attemptStatusLabel, formatDate, formatPercent } from "@/lib/admin/result-format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,12 +16,6 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
-
-const statusLabels: Record<ResultRow["status"], string> = {
-  in_progress: "Đang làm",
-  submitted: "Đã nộp",
-  expired: "Hết giờ",
-};
 
 type Props = {
   searchParams: Promise<{ quizId?: string | string[]; studentId?: string | string[] }>;
@@ -257,21 +252,8 @@ function StatusBadge({ status }: { status: ResultRow["status"] }) {
     <Badge
       variant={status === "submitted" ? "secondary" : status === "expired" ? "destructive" : "outline"}
     >
-      {statusLabels[status]}
+      {attemptStatusLabel(status)}
     </Badge>
   );
 }
 
-function formatPercent(total: number): string {
-  // Vietnamese decimal comma: "33,3%". A whole number stays "20%".
-  return `${total.toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%`;
-}
-
-function formatDate(date: Date | null): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("vi-VN", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "Asia/Ho_Chi_Minh",
-  }).format(date);
-}
