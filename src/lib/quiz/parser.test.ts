@@ -4,7 +4,6 @@ import path from "node:path";
 import { parseQuizJson } from "./parser";
 
 const moodleFile = path.resolve(import.meta.dirname, "../../../moodle_quiz_merged.json");
-
 /** The seam is fed the real Moodle export; fs lives in the test, never in the parser. */
 function parseRealMoodleExport() {
   return parseQuizJson(JSON.parse(readFileSync(moodleFile, "utf8")));
@@ -182,5 +181,200 @@ describe("parseQuizJson on the real Moodle export", () => {
 
     expect(questions.every((question) => /^[0-9a-f]{64}$/.test(question.hash))).toBe(true);
     expect(new Set(questions.map((question) => question.hash)).size).toBe(180);
+  });
+});
+
+/** One Question of each type, shaped exactly like the Moodle export. */
+function fixtureQuestion(overrides: Record<string, unknown>) {
+  return [
+    {
+      no: 1,
+      id: "Q900",
+      type: "multichoice",
+      state: "answersaved",
+      question: "Cú pháp nào sắp xếp mảng?",
+      options: [
+        { key: "a", text: "orderby()", selected: false },
+        { key: "b", text: "sort()", selected: true },
+      ],
+      blanks: [],
+      images: [],
+      ...overrides,
+    },
+    {
+      no: 2,
+      id: "Q901",
+      type: "multianswer",
+      state: "answersaved",
+      question: "Điền … để in số chẵn:\nfor i in range(2, 10, [[1]]):\n    print(i)",
+      options: [],
+      blanks: [
+        { name: "Q901_blank1", value: "2" },
+        { name: "Q901_blank2", value: "" },
+      ],
+      images: [],
+      ...overrides,
+    },
+  ];
+}
+
+describe("parseQuizJson mapping a Moodle fixture", () => {
+  it("maps option.selected onto option.correct and keeps the option key and text", () => {
+    const [question] = parseQuizJson(fixtureQuestion({})).questions;
+
+    expect(question.type).toBe("multichoice");
+    expect(question.options).toEqual([
+      { key: "a", text: "orderby()", correct: false },
+      { key: "b", text: "sort()", correct: true },
+    ]);
+    expect(question.blanks).toEqual([]);
+    expect(question.status).toBe("ready");
+  });
+
+  it("lets a multichoice Question have several correct options without sending it to review", () => {
+    const { questions, stats, errors } = parseQuizJson([
+      {
+        ...fixtureQuestion({})[0],
+        options: [
+          { key: "a", text: "sort()", selected: true },
+          { key: "b", text: "sorted()", selected: true },
+          { key: "c", text: "orderby()", selected: false },
+        ],
+      },
+    ]);
+
+    expect(questions[0].options.filter((option) => option.correct)).toHaveLength(2);
+    expect(questions[0].status).toBe("ready");
+    expect(errors).toEqual([]);
+    expect(stats.needsReview).toBe(0);
+  });
+
+  it("marks a multichoice Question with no selected option as needs_review and explains why", () => {
+    const { questions, stats, errors } = parseQuizJson([
+      {
+        ...fixtureQuestion({})[0],
+        options: [
+          { key: "a", text: "orderby()", selected: false },
+          { key: "b", text: "rank()", selected: false },
+        ],
+      },
+    ]);
+
+    expect(questions[0].status).toBe("needs_review");
+    expect(stats.needsReview).toBe(1);
+    expect(errors).toEqual([{ questionId: "Q900", reason: expect.stringMatching(/đáp án đúng/) }]);
+  });
+
+  it("maps blank.value onto blank.acceptedAnswer and keeps the blank name", () => {
+    const question = parseQuizJson(fixtureQuestion({})).questions[1];
+
+    expect(question.type).toBe("multianswer");
+    expect(question.blanks).toEqual([
+      { name: "Q901_blank1", acceptedAnswer: "2" },
+      { name: "Q901_blank2", acceptedAnswer: "" },
+    ]);
+    expect(question.options).toEqual([]);
+  });
+
+  it("sends a multianswer Question with any empty blank to needs_review but is not a parse error", () => {
+    const { questions, stats, errors } = parseQuizJson([fixtureQuestion({})[1]]);
+
+    expect(questions[0].status).toBe("needs_review");
+    expect(stats.emptyAnswers).toBe(1);
+    // Moodle simply has not been answered here yet; only the giảng viên fills it in.
+    expect(errors).toEqual([]);
+  });
+
+  it("keeps the [[n]] placeholders and the Moodle content verbatim", () => {
+    const content = "In [[1]] và [[2]]:\n  a = [[3]]\n  print(a)";
+    const root = fixtureQuestion({})[1];
+    const question = parseQuizJson([{ ...root, question: content }]).questions[0];
+
+    expect(question.content).toBe(content);
+  });
+
+  it("keeps the image URLs Moodle gave, in order", () => {
+    const images = ["https://lms.example/a.png", "https://lms.example/b.png"];
+    const question = parseQuizJson([{ ...fixtureQuestion({})[0], images }]).questions[0];
+
+    expect(question.images).toEqual(images);
+  });
+
+  it("keeps the Question number and starts every Question enabled", () => {
+    const { questions } = parseQuizJson(fixtureQuestion({}));
+
+    expect(questions.map((question) => [question.id, question.no, question.enabled])).toEqual([
+      ["Q900", 1, true],
+      ["Q901", 2, true],
+    ]);
+  });
+
+  it("changes the hash when the correct answer changes, so an old explanation is not reused", () => {
+    const [original] = fixtureQuestion({});
+    const [before] = parseQuizJson([original]).questions;
+    const [after] = parseQuizJson([
+      {
+        ...original,
+        options: [
+          { key: "a", text: "orderby()", selected: true },
+          { key: "b", text: "sort()", selected: false },
+        ],
+      },
+    ]).questions;
+    const [sameAgain] = parseQuizJson([original]).questions;
+
+    expect(after.hash).not.toBe(before.hash);
+    expect(sameAgain.hash).toBe(before.hash);
+  });
+
+  it("counts Questions by type in the stats", () => {
+    const { stats } = parseQuizJson(fixtureQuestion({}));
+
+    expect(stats).toEqual({
+      total: 2,
+      byType: { multichoice: 1, multianswer: 1 },
+      needsReview: 1,
+      emptyAnswers: 1,
+    });
+  });
+});
+
+describe("parseQuizJson on a damaged Moodle export", () => {
+  it("rejects a top-level value that is not an array with a Vietnamese error", () => {
+    expect(() => parseQuizJson({ questions: [] })).toThrow(TypeError);
+    expect(() => parseQuizJson({ questions: [] })).toThrow(/mảng câu hỏi/);
+  });
+
+  it("reports one malformed Question as an error instead of throwing away the whole file", () => {
+    const { questions, errors, stats } = parseQuizJson([
+      fixtureQuestion({})[0],
+      "không phải object",
+      { id: "Q903", type: "shortanswer", question: "x" },
+      null,
+    ]);
+
+    expect(questions.map((question) => question.id)).toEqual(["Q900"]);
+    expect(stats.total).toBe(1);
+    expect(errors).toHaveLength(3);
+    expect(errors[1].questionId).toBe("Q903");
+    expect(errors[1].reason).toMatch(/shortanswer/);
+    expect(errors.map((error) => error.reason).join("\n")).toMatch(/Câu thứ 2/);
+  });
+
+  it("reports a multianswer Question with no blank as an error and needs_review", () => {
+    const { questions, errors } = parseQuizJson([
+      { ...fixtureQuestion({})[1], blanks: [] },
+    ]);
+
+    expect(questions[0].status).toBe("needs_review");
+    expect(errors).toEqual([{ questionId: "Q901", reason: expect.stringMatching(/ô trống/) }]);
+  });
+
+  it("treats an empty Question list as a valid upload with nothing to review", () => {
+    expect(parseQuizJson([])).toEqual({
+      questions: [],
+      stats: { total: 0, byType: { multichoice: 0, multianswer: 0 }, needsReview: 0, emptyAnswers: 0 },
+      errors: [],
+    });
   });
 });
