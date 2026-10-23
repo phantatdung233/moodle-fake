@@ -21,6 +21,9 @@ async function startPracticeAttempt(studentId: string) {
   });
   if (!created.ok) throw new Error(created.error);
 
+  const { transitionToStatus } = await import("@/lib/admin/test-helpers");
+  await transitionToStatus(created.quizId, "published");
+
   const started = await resumeOrStartAttempt({
     quizId: created.quizId,
     studentId,
