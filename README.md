@@ -10,8 +10,11 @@ Moodle JSON → đề nháp** với màn hình preview (số câu theo loại, s
 lỗi parse), danh sách đề ở `/admin`, **parser thuần** biến file Moodle thành
 `Question` chuẩn hoá (`src/lib/quiz/parser.ts`), **module chấm điểm thuần**
 (`src/lib/quiz/grading.ts`), **luồng sinh viên luyện tập** (`/`, `/q/<slug>`):
-nhập MSSV + họ tên, mỗi màn một câu, tự lưu, xem đáp án tức thì, và **giải thích
-Gemini streaming** sau mỗi câu (`POST /api/explain`, cache theo `Question.hash`).
+nhập MSSV + họ tên, mỗi màn một câu, tự lưu, xem đáp án tức thì, **vòng đời
+đề + chế độ thi**: sửa đề nháp, publish (chốt đề), huỷ publish, lưu trữ, thi có
+đồng hồ đếm ngược, nộp bài và trang tổng kết (`/q/<slug>/ket-qua`), và **giải
+thích Gemini streaming** sau mỗi câu (`POST /api/explain`, cache theo
+`Question.hash`).
 
 ## Yêu cầu
 
@@ -136,13 +139,15 @@ type AttemptAnswer = {
   không bỏ dấu tiếng Việt. Câu trả lời rỗng/sai cấu trúc được coi là bỏ trống
   (0 điểm), không ném lỗi.
 
-## Sinh viên làm bài (`/`, `/q/<slug>`)
+## Sinh viên làm bài (`/`, `/q/<slug>`, `/q/<slug>/ket-qua`)
 
-1. Trang chủ `/` liệt kê các đề đang có (ticket #8 sẽ giới hạn còn đề `published`;
-   hiện tại đề nháp cũng hiện, có nhãn "Bản nháp", để demo ngay sau `pnpm seed`).
+1. Trang chủ `/` chỉ liệt kê các đề `status: published`; đề nháp và đề lưu trữ
+   không hiện, và vào thẳng `/q/<slug>` của đề chưa publish cũng bị chặn
+   ("Đề này chưa mở cho sinh viên làm.").
 2. Bấm vào đề → `/q/<slug>`: nếu trình duyệt chưa có danh tính cho đề này thì hiện
    form **MSSV + họ tên** (không mật khẩu). Gửi form sẽ **tiếp tục** bài đang làm
-   dở của MSSV đó nếu có, ngược lại tạo `Attempt` mới.
+   dở của MSSV đó nếu có, ngược lại tạo `Attempt` mới. Cookie đã có bài **đã nộp**
+   thì được chuyển thẳng tới `/q/<slug>/ket-qua`.
 3. Mỗi màn một câu, hiện "Câu n/180", nút **Câu trước / Câu sau** và panel
    **Danh sách câu** để nhảy tới câu bất kỳ. Ô trong panel tô màu: đã trả lời,
    chưa trả lời, đã khoá.
@@ -156,6 +161,17 @@ type AttemptAnswer = {
    grammar không vào bundle trình duyệt), chữ thường qua Markdown đã sanitize,
    ô trống nằm **đúng vị trí `[[n]]`** kể cả khi nằm trong code, và ảnh đính kèm
    (Q020, Q114) được hiển thị.
+7. Chế độ thi **không** có nút xem đáp án, không lộ đáp án/giải thích trong HTML
+   trước khi nộp. Nếu đề có `timeLimit`, góc phải hiện **đồng hồ đếm ngược** tính
+   từ `Attempt.deadline` (server ghi lúc bắt đầu); hết giờ thì trình duyệt tự nộp,
+   và server cũng tự nộp khi trang được tải lại sau hạn.
+8. Nút **Nộp bài** mở hộp thoại xác nhận (hiện số câu bỏ trống). Nộp xong mở
+   `/q/<slug>/ket-qua`: phần trăm điểm, số câu đúng/sai/bỏ trống, và **review
+   từng câu** (đáp án đã chọn vs đáp án đúng, ô trống đúng/sai). Chỉ nộp được một
+   lần — bấm lại trả về kết quả cũ, không chấm lại. Câu bỏ trống tính 0 điểm.
+9. Đề giới hạn `maxAttempts` (chế độ thi): hết lượt thì báo
+   "Bạn đã hết N lần làm đề này." Bài đang làm dở vẫn luôn được tiếp tục. Khi còn
+   lượt, trang tổng kết có nút **Làm lại** (tạo `Attempt` mới, chấm lại từ đầu).
 
 ### Danh tính sinh viên
 
@@ -188,29 +204,79 @@ type Attempt = {
 
 Partial unique index trên `(studentId, quizId)` với `status: "in_progress"`:
 mỗi sinh viên chỉ có **một** bài đang làm cho mỗi đề; hai tab bấm cùng lúc thì
-tab thua đọc lại bài đã tạo. Làm lại sau khi nộp (ticket #8) sẽ tạo `Attempt` mới.
+tab thua đọc lại bài đã tạo. Làm lại sau khi nộp tạo `Attempt` mới; `maxAttempts`
+đếm số `Attempt` `submitted` + `expired` (chỉ chế độ thi).
 
 ### Lớp dữ liệu Attempt (`src/lib/quiz/attempt-repository.ts`)
 
 - `resumeOrStartAttempt({ quizId, studentId, studentName })` →
-  `{ ok: true, attempt, resumed } | { ok: false, error }` — điểm vào duy nhất.
+  `{ ok: true, attempt, resumed } | { ok: false, error }` — điểm vào duy nhất;
+  từ chối đề chưa publish (`QUIZ_NOT_OPEN_ERROR`) và đề đã hết lượt làm.
 - `getAttemptForStudent(attemptId, studentId)` → `AttemptView | null` — sai chủ
   thì `null`.
 - `getOpenAttempt(quizId, studentId)` → `AttemptView | null`.
 - `answerQuestion({ attemptId, studentId, questionId, selectedOptionKeys, blankValues })`
-  → `{ ok: true } | { ok: false, error }` — chặn câu đã xem đáp án.
+  → `{ ok: true } | { ok: false, error }` — chặn câu đã xem đáp án và bài đã nộp.
 - `revealQuestion({ attemptId, studentId, questionId })` →
   `{ ok: true, feedback } | { ok: false, error }` — chỉ chế độ luyện tập.
+- `submitAttempt({ attemptId, studentId })` →
+  `{ ok: true, status: "submitted" | "expired", result } | { ok: false, error }` —
+  chấm **một lần** bằng `gradeAttempt`, lưu `result`, khoá mọi câu (`revealed: true`).
+  Guard `findOneAndUpdate({ status: "in_progress" })` nên gọi lại (bấm hai lần, hai
+  tab) trả về đúng kết quả cũ; quá `deadline` thì `status: "expired"`.
+- `submitExpiredIfDue(attempt)` — tự nộp bài quá hạn, gọi trong `loadAttempt`.
+- `getSummaryForStudent(quizId, studentId, attemptId?)` → `AttemptSummary | null`
+  cho trang tổng kết (điểm, per-question, lịch sử, còn lượt hay không).
 - `normalizeStudentId(raw)`, `NOT_YOUR_ATTEMPT_ERROR`, `REVEALED_LOCKED_ERROR`,
-  `QUESTION_NOT_FOUND_ERROR`.
+  `QUESTION_NOT_FOUND_ERROR`, `SUBMITTED_LOCKED_ERROR`, `TIME_UP_ERROR`,
+  `QUIZ_NOT_OPEN_ERROR`.
 
 Server actions cho trình duyệt (`src/lib/student/actions.ts`):
-`beginAttempt`, `loadAttempt`, `saveAnswer`, `revealAnswer`, `forgetStudent`.
+`beginAttempt`, `loadAttempt`, `loadOwnedAttempt`, `loadSummary`, `saveAnswer`,
+`revealAnswer`, `submitMyAttempt`, `forgetStudent`. Mọi action đọc danh tính từ
+cookie và kiểm tra lại chủ `Attempt` ở server.
+
+## Vòng đời đề (`/admin/quizzes/<id>`)
+
+```
+draft ──publish──▶ published ──archive──▶ archived (trạng thái cuối)
+  ▲                    │
+  └────unpublish───────┘  (chỉ khi đề chưa có Attempt nào)
+```
+
+- **Đề nháp** sửa được mọi thứ: tên, slug, chế độ (`practice` / `exam`), thời gian
+  làm bài (phút), số lần làm tối đa, và bật/tắt từng câu (`enabled`). Mọi thay đổi
+  bị từ chối ở server nếu đề không còn `draft` (thông báo tiếng Việt).
+- **Publish** = chốt đề: chỉ các câu `enabled && ready` (không `needs_review`)
+  được đưa vào bài. Trước khi xác nhận, UI cảnh báo "N câu sẽ bị loại"; nếu không
+  còn câu dùng được thì chặn publish. Publish tăng `version` và ghi `publishedAt`.
+- **Huỷ publish** đưa đề về `draft` (giữ nguyên các câu đã bị loại ở trạng thái
+  tắt) và xoá `publishedAt`; **bị từ chối** khi đã có `Attempt` — vì bài đã chốt
+  không được lệch với snapshot của sinh viên.
+- **Lưu trữ** chỉ từ `published`, là trạng thái cuối: đề biến khỏi `/`, không sửa
+  được nữa, nhưng kết quả cũ vẫn xem được qua `/q/<slug>/ket-qua`.
+
+### Lớp dữ liệu vòng đời (`src/lib/quiz/lifecycle-repository.ts`)
+
+- `describePublish(quizId)` → `PublishPreview` (số câu giữ lại, số câu bị loại) —
+  dùng để hiện cảnh báo trước khi publish.
+- `publishQuiz(quizId)` → `{ ok: true, version } | { ok: false, error }`.
+- `unpublishQuiz(quizId)`, `archiveQuiz(quizId)` → `{ ok: true } | { ok: false, error }`.
+- `updateQuizSettings(quizId, { title, slug, mode, timeLimit, maxAttempts })`.
+- `saveQuestionSelection(quizId, { questionId, enabled })`.
+- Hằng số lỗi: `NOT_DRAFT_ERROR`, `NOT_PUBLISHED_ERROR`, `NOT_ARCHIVED_ERROR`,
+  `ARCHIVED_TERMINAL_ERROR`, `NO_READY_QUESTIONS_ERROR`,
+  `UNPUBLISH_HAS_ATTEMPTS_ERROR`, `TIME_LIMIT_ERROR`, `MAX_ATTEMPTS_ERROR`…
+
+Server actions (`src/lib/admin/lifecycle-actions.ts`, đều kiểm tra phiên admin):
+`saveQuizSettings`, `toggleQuestion`, `publishQuizAction`, `unpublishQuizAction`,
+`archiveQuizAction`.
 
 ## Giải thích bằng Gemini (`src/lib/gemini/`, `/api/explain`)
 
-Sau khi câu được chấm (chế độ luyện tập: bấm **Xem đáp án**) một panel
-**“Giải thích bằng AI”** hiện dưới phần phản hồi và chữ chạy dần. Đúng/sai và
+Sau khi câu được chấm (chế độ luyện tập: bấm **Xem đáp án**; chế độ thi: ngay khi
+nộp, trong phần review từng câu ở `/q/<slug>/ket-qua`) một panel **“Giải thích
+bằng AI”** hiện dưới phần phản hồi và chữ chạy dần. Đúng/sai và
 đáp án **không bao giờ** đến từ Gemini — đó là kết quả của `gradeAnswer`; Gemini
 chỉ viết lời giải thích (tiếng Việt, ngắn), và được yêu cầu **nói thẳng** nếu
 đáp án ghi nhận trong đề sai kiến thức (Q144, Q153, Q156, Q165…).
@@ -250,22 +316,25 @@ bài, `409` trang đã cũ (hash lệch) → panel nhắc tải lại. Client đ
 ## Cấu trúc
 
 ```
-src/app/                 App Router: / (danh sách đề), /q/[slug] (làm bài),
-                         /admin, /admin/login, /admin/quizzes/[id]
+src/app/                 App Router: / (danh sách đề đã publish), /q/[slug] (làm bài),
+                         /q/[slug]/ket-qua (tổng kết + review từng câu),
+                         /admin, /admin/login, /admin/quizzes/[id] (sửa đề + vòng đời)
 src/components/ui/       shadcn/ui (preset radix-nova)
-src/components/quiz/     quiz-runner (client: trạng thái, lưu, panel, phản hồi),
-                         question-content + highlight (server: markdown, shiki, ảnh)
+src/components/quiz/     quiz-runner (client: trạng thái, lưu, panel, phản hồi, đồng hồ,
+                         nộp bài), question-content + highlight (server: markdown, shiki, ảnh)
 src/lib/auth/token.ts    HMAC token dùng chung cho cookie admin và sinh viên
 src/lib/admin/           mật khẩu admin, session cookie, server actions login/logout/upload,
+                         lifecycle-actions (sửa đề, bật/tắt câu, publish/huỷ/lưu trữ),
                          upload.ts (đọc file + preview, gọi parser)
 src/lib/quiz/            model Quiz + Attempt, parser Moodle, grading, repository,
-                         attempt-repository, content/splitPlaceholders, markdown, slug
+                         lifecycle-repository, attempt-repository,
+                         content/splitPlaceholders, markdown, slug
 src/lib/gemini/          prompt thuần, ExplainClient + SDK Gemini, ExplanationCache,
                          explainQuestion, đọc frame SSE, messages (dùng cho client)
 src/app/api/explain/     route handler streaming giải thích
 src/components/quiz/explanation-panel.tsx  panel “Giải thích bằng AI”
 src/lib/student/         session cookie sinh viên, server actions, answers (helper thuần),
-                         feedback (câu chữ phản hồi)
+                         feedback (câu chữ phản hồi), exam (helper trình bày trạng thái thi)
 src/lib/db.ts            kết nối Mongoose dùng chung
 src/middleware.ts        chặn mọi /admin/** khi chưa có phiên hợp lệ
 src/test/                helper test: env, mongodb-memory-server
@@ -283,8 +352,10 @@ Mongoose document):
 - `listQuizzes()` → `QuizListItem[]` cho `/admin` (số câu, ready/needs_review, lượt làm).
 - `getQuizForAdmin(id)` → `QuizDetail | null` cho `/admin/quizzes/[id]`
   (`null` khi id sai hoặc không tồn tại).
-- `getQuizBySlug(slug)` → `TestableQuiz | null` cho `/q/<slug>`.
-- `listTestableQuizzes()` → `TestableQuiz[]` cho trang chủ.
+- `getQuizBySlug(slug)` → `TestableQuiz | null` cho `/q/<slug>` — chỉ đề
+  `published`; `getQuizBySlugAnyStatus(slug)` dùng riêng cho trang tổng kết
+  (kể cả đề đã lưu trữ).
+- `listTestableQuizzes()` → `TestableQuiz[]` cho trang chủ (chỉ đề `published`).
 
 ## Ghi chú
 
@@ -294,4 +365,9 @@ Mongoose document):
   `SameSite=Lax`, `Secure` khi production.
 - Khi test component `.tsx` bằng Vitest, file test dùng `renderToStaticMarkup`
   (xem `src/components/quiz/question-content.test.tsx`); `@vitejs/plugin-react`
-  lo phần JSX vì `tsconfig` giữ JSX cho Next.
+  lo phần JSX vì `tsconfig` giữ JSX cho Next. Server component async phải
+  `await` rồi mới render (xem helper `resolveTree` trong
+  `src/app/q/summary-page.test.tsx`), và client component được thay bằng
+  `client:<Tên>` khi kiểm tra cây props.
+- `src/lib/admin/test-helpers.ts` chỉ dùng trong test: đưa đề sang trạng thái bất
+  kỳ (`transitionToStatus`) và xoá `Attempt` (`resetAttempts`).

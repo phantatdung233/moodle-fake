@@ -83,11 +83,12 @@ describe("createDraftQuizFromQuestions", () => {
 
   it("từ chối slug trùng và không tạo thêm đề", async () => {
     const { questions } = moodleExport();
-    await createDraftQuizFromQuestions({
+    const first = await createDraftQuizFromQuestions({
       title: "Python cơ bản",
       slug: "python-co-ban",
       questions,
     });
+    expect(first.ok).toBe(true);
 
     const duplicate = await createDraftQuizFromQuestions({
       title: "Python cơ bản (bản 2)",
@@ -275,6 +276,9 @@ describe("getQuizForAdmin", () => {
     if (!created.ok) throw new Error(created.error);
 
     const { resumeOrStartAttempt } = await import("./attempt-repository");
+    const { publishQuiz } = await import("./lifecycle-repository");
+    const published = await publishQuiz(created.quizId);
+    if (!published.ok) throw new Error(published.error);
     await resumeOrStartAttempt({ quizId: created.quizId, studentId: "B2012345", studentName: "Nguyễn Văn An" });
     await resumeOrStartAttempt({ quizId: created.quizId, studentId: "B2012346", studentName: "Trần Thị Bình" });
 

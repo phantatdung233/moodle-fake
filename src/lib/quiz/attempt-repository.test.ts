@@ -6,6 +6,7 @@ import { Attempt } from "./attempt.model";
 import { Quiz } from "./quiz.model";
 import { parseQuizJson } from "./parser";
 import { createDraftQuizFromQuestions } from "./repository";
+import { publishQuiz } from "./lifecycle-repository";
 import {
   answerQuestion,
   getAttemptForStudent,
@@ -22,6 +23,11 @@ function questions() {
   return parseQuizJson(JSON.parse(readFileSync(MOODLE_FILE, "utf8"))).questions;
 }
 
+/**
+ * A draft Quiz that is then published, because only a published Quiz accepts
+ * Attempts (ticket #8). Publishing switches off the `needs_review` Questions,
+ * so a published 180-Question Quiz offers 80 to the sinh viên.
+ */
 async function seedQuiz(slug = "python-co-ban"): Promise<string> {
   const created = await createDraftQuizFromQuestions({
     title: "Python cơ bản",
@@ -29,6 +35,8 @@ async function seedQuiz(slug = "python-co-ban"): Promise<string> {
     questions: questions(),
   });
   if (!created.ok) throw new Error(created.error);
+  const published = await publishQuiz(created.quizId);
+  if (!published.ok) throw new Error(published.error);
   return created.quizId;
 }
 
@@ -52,7 +60,7 @@ describe("starting an Attempt", () => {
     await clearTestDatabase();
   });
 
-  it("snapshots every Question of the Quiz and starts in progress", async () => {
+  it("snapshots every published Question of the Quiz and starts in progress", async () => {
     const quizId = await seedQuiz();
 
     const result = await resumeOrStartAttempt({ quizId, studentId: "b2012345", studentName: " Nguyễn Văn An " });
@@ -63,12 +71,12 @@ describe("starting an Attempt", () => {
       studentId: "B2012345",
       studentName: "Nguyễn Văn An",
       quizSlug: "python-co-ban",
-      quizVersion: 1,
+      quizVersion: 2,
       mode: "practice",
       status: "in_progress",
       answers: [],
     });
-    expect(result.attempt.questionsSnapshot).toHaveLength(180);
+    expect(result.attempt.questionsSnapshot).toHaveLength(80);
     expect(result.attempt.questionsSnapshot[0].id).toBe("Q001");
   });
 
@@ -108,12 +116,12 @@ describe("starting an Attempt", () => {
 
     await Quiz.updateOne(
       { _id: quizId },
-      { $set: { version: 2, questions: questions().slice(0, 3) } },
+      { $set: { version: 3, questions: questions().slice(0, 3) } },
     );
 
     const reopened = await getAttemptForStudent(started.attempt.id, "B2012345");
-    expect(reopened?.quizVersion).toBe(1);
-    expect(reopened?.questionsSnapshot).toHaveLength(180);
+    expect(reopened?.quizVersion).toBe(2);
+    expect(reopened?.questionsSnapshot).toHaveLength(80);
   });
 
   it("rejects a blank MSSV or blank name", async () => {

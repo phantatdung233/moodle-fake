@@ -6,12 +6,16 @@ import { cookies } from "next/headers";
 import { getQuizBySlug } from "@/lib/quiz/repository";
 import {
   answerQuestion,
-  getAttemptForStudent,
+  getSummaryForStudent,
   resumeOrStartAttempt,
   revealQuestion,
+  submitAttempt,
+  submitExpiredIfDue,
+  type AttemptSummary,
   type AttemptView,
   type RevealFeedback,
 } from "@/lib/quiz/attempt-repository";
+import type { AttemptResult } from "@/lib/quiz/attempt.model";
 import {
   clearedStudentSessionCookie,
   createStudentSessionCookie,
@@ -68,14 +72,45 @@ export async function beginAttempt(input: BeginAttemptInput): Promise<BeginAttem
   redirect(`/q/${quiz.slug}`);
 }
 
-/** The Attempt this browser is working on for the Quiz, or `null` (identity form). */
+/**
+ * The Attempt this browser is working on for the Quiz, or `null` (identity
+ * form). An exam Attempt past its deadline is auto-submitted here, before the
+ * page decides between the runner and the summary (Spec, "Làm bài").
+ */
 export async function loadAttempt(input: { slug: string }): Promise<AttemptView | null> {
   const identity = await currentIdentity();
   if (!identity) return null;
 
-  const attempt = await getAttemptForStudent(identity.attemptId, identity.studentId);
+  const attempt = await submitExpiredIfDue({
+    attemptId: identity.attemptId,
+    studentId: identity.studentId,
+  });
   if (!attempt || attempt.quizSlug !== input.slug || attempt.status !== "in_progress") return null;
   return attempt;
+}
+
+/** The Attempt this browser owns for the Quiz, in any state; `null` for the identity form. */
+export async function loadOwnedAttempt(input: { slug: string }): Promise<AttemptView | null> {
+  const identity = await currentIdentity();
+  if (!identity) return null;
+
+  const attempt = await submitExpiredIfDue({
+    attemptId: identity.attemptId,
+    studentId: identity.studentId,
+  });
+  if (!attempt || attempt.quizSlug !== input.slug) return null;
+  return attempt;
+}
+
+/**
+ * The summary page's data: only this MSSV's Attempts for the Quiz, with the
+ * Attempt this browser is looking at (the cookie's) as `latest`. `null` when
+ * this browser has no identity for the Quiz yet.
+ */
+export async function loadSummary(input: { quizId: string }): Promise<AttemptSummary | null> {
+  const identity = await currentIdentity();
+  if (!identity) return null;
+  return getSummaryForStudent(input.quizId, identity.studentId, identity.attemptId);
 }
 
 export type SaveAnswerInput = {
@@ -113,6 +148,26 @@ export async function revealAnswer(input: { questionId: string }): Promise<Revea
     questionId: input.questionId,
   });
   if (result.ok) revalidatePath("/q", "layout");
+  return result;
+}
+
+export type SubmitAttemptResult =
+  | { ok: true; status: "submitted" | "expired"; result: AttemptResult }
+  | { ok: false; error: string };
+
+/** "Nộp bài" after the confirm dialog; practice and exam alike. */
+export async function submitMyAttempt(): Promise<SubmitAttemptResult> {
+  const identity = await currentIdentity();
+  if (!identity) return { ok: false, error: NO_IDENTITY };
+
+  const result = await submitAttempt({
+    attemptId: identity.attemptId,
+    studentId: identity.studentId,
+  });
+  if (result.ok) {
+    revalidatePath("/q", "layout");
+    revalidatePath("/");
+  }
   return result;
 }
 

@@ -10,6 +10,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { QuizSettingsForm } from "./settings-form";
+import { QuestionSelectionList } from "./question-selection";
+import { QuizLifecycleCard } from "./lifecycle-card";
 
 export const metadata: Metadata = {
   title: "Chi tiết đề",
@@ -31,8 +34,10 @@ const modeLabels: Record<QuizDetail["mode"], string> = {
 type Props = { params: Promise<{ id: string }> };
 
 /**
- * Summary of one Quiz. Editing Questions, the review page and publish controls
- * are added by the later admin tickets; this page only proves the upload landed.
+ * One Quiz for the giảng viên: summary, lifecycle controls (publish /
+ * unpublish / archive) and — while the Quiz is a draft — the settings and the
+ * Question selection. A published Quiz shows the same page read-only; the
+ * actions refuse writes server-side regardless (Spec, "Publish state machine").
  */
 export default async function AdminQuizPage({ params }: Props) {
   const { id } = await params;
@@ -65,6 +70,12 @@ export default async function AdminQuizPage({ params }: Props) {
           <h1 className="text-2xl font-semibold">{quiz.title}</h1>
           <p className="text-sm break-all text-muted-foreground">
             /q/{quiz.slug} · {modeLabels[quiz.mode]} · bản {quiz.version}
+            {quiz.mode === "exam" && quiz.timeLimit !== null
+              ? ` · ${quiz.timeLimit} phút`
+              : ""}
+            {quiz.mode === "exam" && quiz.maxAttempts !== null
+              ? ` · tối đa ${quiz.maxAttempts} lần`
+              : ""}
           </p>
         </div>
         <span className="rounded-full border px-3 py-1 text-xs">
@@ -78,7 +89,9 @@ export default async function AdminQuizPage({ params }: Props) {
           <CardDescription>
             {quiz.status === "draft"
               ? "Đề nháp: vẫn sửa được câu hỏi và đáp án trước khi publish."
-              : null}
+              : quiz.status === "published"
+                ? "Đề đã publish và đóng băng. Sinh viên đang làm theo bản đã publish."
+                : "Đề đã lưu trữ. Các lượt làm cũ vẫn đọc được."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -87,6 +100,7 @@ export default async function AdminQuizPage({ params }: Props) {
             <Stat label="Trắc nghiệm" value={quiz.multichoiceCount} />
             <Stat label="Điền khuyết" value={quiz.multianswerCount} />
             <Stat label="Cần duyệt đáp án" value={quiz.needsReviewCount} highlight />
+            <Stat label="Sẽ publish" value={quiz.publishableCount} />
             <Stat label="Lượt làm" value={quiz.attemptCount} />
             <Stat label="Đã publish lúc" value={formatDate(quiz.publishedAt)} />
           </dl>
@@ -99,12 +113,82 @@ export default async function AdminQuizPage({ params }: Props) {
         </CardContent>
       </Card>
 
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Publish & khoá đề</CardTitle>
+          <CardDescription>
+            Publish chỉ đưa ra những câu đang bật và đã có đáp án.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <QuizLifecycleCard quiz={quiz} />
+        </CardContent>
+      </Card>
+
+      {quiz.status === "draft" ? (
+        <>
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Cài đặt đề</CardTitle>
+              <CardDescription>
+                Chế độ, thời gian và số lần làm. Chỉ sửa được khi đề còn nháp.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <QuizSettingsForm
+                quizId={quiz.id}
+                title={quiz.title}
+                slug={quiz.slug}
+                mode={quiz.mode}
+                timeLimit={quiz.timeLimit}
+                maxAttempts={quiz.maxAttempts}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Chọn câu đưa vào đề</CardTitle>
+              <CardDescription>
+                Bật/tắt từng câu. Câu đang tắt hoặc chưa duyệt đáp án sẽ bị loại khi publish.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <QuestionSelectionList
+                quizId={quiz.id}
+                questions={quiz.questions}
+                readOnly={false}
+              />
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Câu trong đề</CardTitle>
+            <CardDescription>
+              Đề đã đóng băng: danh sách chỉ để xem lại. Câu đang tắt không phát cho sinh viên.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <QuestionSelectionList quizId={quiz.id} questions={quiz.questions} readOnly />
+          </CardContent>
+        </Card>
+      )}
+
       <div className="mt-6 flex flex-wrap gap-2">
         <Button asChild>
           <Link href={`/admin/quizzes/${quiz.id}/review`}>
             {quiz.needsReviewCount > 0 ? "Duyệt đáp án" : "Xem lại đáp án"}
           </Link>
         </Button>
+        {quiz.status === "published" ? (
+          <Button asChild variant="outline">
+            <Link href={`/q/${quiz.slug}`} target="_blank">
+              Mở đề như sinh viên
+            </Link>
+          </Button>
+        ) : null}
         <Button asChild variant="outline">
           <Link href="/admin">Về danh sách đề</Link>
         </Button>

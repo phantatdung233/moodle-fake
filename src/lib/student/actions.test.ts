@@ -45,6 +45,10 @@ async function seedQuiz(): Promise<string> {
     questions: parseQuizJson(JSON.parse(readFileSync(MOODLE_FILE, "utf8"))).questions,
   });
   if (!created.ok) throw new Error(created.error);
+  // Only a published Quiz accepts Attempts (ticket #8).
+  const { publishQuiz } = await import("@/lib/quiz/lifecycle-repository");
+  const published = await publishQuiz(created.quizId);
+  if (!published.ok) throw new Error(published.error);
   return created.quizId;
 }
 

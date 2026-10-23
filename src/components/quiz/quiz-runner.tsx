@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, ListChecks, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ArrowRight, Check, ListChecks, Loader2, Send, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import type { AttemptView } from "@/lib/quiz/attempt-repository";
 import type { QuizQuestion } from "@/lib/quiz/quiz.model";
@@ -37,7 +49,8 @@ import {
   QuestionContent,
   QuestionImages,
 } from "@/components/quiz/question-content";
-import { saveAnswer, revealAnswer } from "@/lib/student/actions";
+import { formatCountdown, isExpired, remainingMs } from "@/lib/student/exam";
+import { saveAnswer, revealAnswer, submitMyAttempt } from "@/lib/student/actions";
 import { ExplanationPanel } from "@/components/quiz/explanation-panel";
 
 /** How long a text input waits before saving, so typing does not hit the DB per key. */
@@ -58,6 +71,10 @@ function feedbackFromAttempt(questionId: string, attempt: AttemptView): Feedback
 export type QuizRunnerProps = {
   /** Plain data (no Mongoose) so it survives the server → client boundary. */
   attempt: AttemptView;
+  /** Attempts the Quiz allows in exam mode; shown in the end-of-paper notice. */
+  maxAttempts?: number;
+  /** Lessons every Question's explanation panel shows (ticket #9). */
+  lessons?: readonly string[];
 };
 
 /**
@@ -66,7 +83,8 @@ export type QuizRunnerProps = {
  * owns all client state and makes sure a debounced keystroke is flushed before
  * any navigation, before a reveal, and on page unload.
  */
-export function QuizRunner({ attempt: initialAttempt }: QuizRunnerProps) {
+export function QuizRunner({ attempt: initialAttempt, maxAttempts, lessons = [] }: QuizRunnerProps) {
+  const router = useRouter();
   const questions = initialAttempt.questionsSnapshot;
   const [current, setCurrent] = useState(0);
   const [attempt, setAttempt] = useState(initialAttempt);
@@ -80,8 +98,14 @@ export function QuizRunner({ attempt: initialAttempt }: QuizRunnerProps) {
   const [revealing, setRevealing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [remaining, setRemaining] = useState<number | null>(() =>
+    remainingMs(initialAttempt.deadline, new Date()),
+  );
+  const [timeUp, setTimeUp] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const question = questions[current];
+  const exam = initialAttempt.mode === "exam";
 
   /** A save still waiting on the debounce; a newer draft replaces it. */
   const pending = useRef<{ questionId: string; draft: Draft; timer: ReturnType<typeof setTimeout> | null } | null>(
@@ -113,6 +137,41 @@ export function QuizRunner({ attempt: initialAttempt }: QuizRunnerProps) {
     }
   }, []);
 
+  // Exam countdown. The clock drives the display; the server re-checks the
+  // deadline on every save and on submit, so a paused tab buys nothing.
+  useEffect(() => {
+    if (!initialAttempt.deadline) return;
+    const tick = () => setRemaining(remainingMs(initialAttempt.deadline, new Date()));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [initialAttempt.deadline]);
+
+  // Auto-submit at expiry: flush whatever is still debounced, then submit.
+  // `submitExpiredIfDue` on the server marks the Attempt `expired`, so even a
+  // closed tab ends up submitted.
+  useEffect(() => {
+    // The tick sets `remaining` to exactly 0 at the deadline, so waiting for
+    // `remaining === null` (no limit) also means this never fires for practice.
+    if (remaining === null || remaining > 0 || timeUp) return;
+    if (!isExpired(initialAttempt.deadline, new Date())) return;
+
+    let cancelled = false;
+    setTimeUp(true);
+    void (async () => {
+      await flush();
+      try {
+        await submitMyAttempt();
+      } catch {
+        // The summary page will show the stored result; nothing to recover here.
+      }
+      if (!cancelled) router.replace(summaryHref(initialAttempt.quizSlug));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialAttempt.deadline, initialAttempt.quizSlug, remaining, timeUp, flush, router]);
+
   // Never lose a debounced keystroke on reload / tab close.
   useEffect(() => {
     function onBeforeUnload() {
@@ -126,7 +185,7 @@ export function QuizRunner({ attempt: initialAttempt }: QuizRunnerProps) {
   }, []);
 
   function queueSave(nextDraft: Draft, immediate: boolean) {
-    if (!question || isRevealed(attempt, question.id)) return;
+    if (!question || isRevealed(attempt, question.id) || timeUp) return;
     if (pending.current?.timer) clearTimeout(pending.current.timer);
     pending.current = { questionId: question.id, draft: nextDraft, timer: null };
     if (immediate) {
@@ -168,6 +227,27 @@ export function QuizRunner({ attempt: initialAttempt }: QuizRunnerProps) {
       setError("Không chấm được câu này. Kiểm tra kết nối rồi thử lại.");
     } finally {
       setRevealing(false);
+    }
+  }
+
+  async function onSubmitPaper() {
+    if (submitting) return;
+    setError(null);
+    // The last keystroke must be saved before grading, or it would score 0.
+    if (!(await flush())) return;
+
+    setSubmitting(true);
+    try {
+      const result = await submitMyAttempt();
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.replace(summaryHref(initialAttempt.quizSlug));
+    } catch {
+      setError("Không nộp được bài. Kiểm tra kết nối rồi thử lại.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -258,6 +338,20 @@ export function QuizRunner({ attempt: initialAttempt }: QuizRunnerProps) {
             </Dialog>
           </span>
         </div>
+        {exam && remaining !== null ? (
+          <p
+            className={cn(
+              "flex items-center gap-1.5 text-sm font-semibold tabular-nums",
+              remaining <= 5 * 60_000 ? "text-destructive" : "text-muted-foreground",
+            )}
+            role="timer"
+            aria-live={remaining <= 5 * 60_000 ? "assertive" : "off"}
+            aria-label="Thời gian còn lại"
+          >
+            <Timer className="size-4" />
+            {timeUp ? "Hết giờ" : formatCountdown(remaining)}
+          </p>
+        ) : null}
         <Progress value={progress} aria-label={`Đã làm ${done}/${questions.length} câu`} />
       </div>
 
@@ -349,6 +443,24 @@ export function QuizRunner({ attempt: initialAttempt }: QuizRunnerProps) {
         ) : null}
       </main>
 
+      {exam ? (
+        <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+          Chế độ kiểm tra: đáp án và giải thích chỉ hiện sau khi nộp.
+          {remaining !== null ? " Bài tự động nộp khi hết giờ." : ""}
+          {maxAttempts !== undefined ? ` Bạn được làm tối đa ${maxAttempts} lần.` : ""}
+          {lessons.length > 0 ? ` Bài gồm ${lessons.join(", ")}.` : ""}
+        </p>
+      ) : null}
+
+      {timeUp ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          Đã hết giờ. Bài đang được nộp tự động…
+        </p>
+      ) : null}
+
       <nav className="flex items-center justify-between gap-3 border-t pt-4">
         <Button variant="outline" onClick={() => goTo(current - 1)} disabled={current === 0}>
           <ArrowLeft /> Câu trước
@@ -360,8 +472,61 @@ export function QuizRunner({ attempt: initialAttempt }: QuizRunnerProps) {
           Câu sau <ArrowRight />
         </Button>
       </nav>
+
+      <SubmitPaper
+        unanswered={questions.length - done}
+        submitting={submitting || timeUp}
+        onSubmit={onSubmitPaper}
+      />
     </div>
   );
+}
+
+/** "Nộp bài" with a confirm dialog naming how many Questions are still blank. */
+function SubmitPaper({
+  unanswered,
+  submitting,
+  onSubmit,
+}: {
+  unanswered: number;
+  submitting: boolean;
+  onSubmit: () => void;
+}) {
+  return (
+    <section className="flex flex-col gap-2 rounded-lg border p-4">
+      <p className="text-sm text-muted-foreground">
+        {unanswered === 0
+          ? "Bạn đã trả lời mọi câu. Nộp bài để chấm điểm và xem lại."
+          : `Còn ${unanswered} câu chưa trả lời — câu bỏ trống tính 0 điểm.`}
+      </p>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button disabled={submitting} className="self-start">
+            <Send /> {submitting ? "Đang nộp…" : "Nộp bài"}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Nộp bài?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {unanswered === 0
+                ? "Bài sẽ được chấm ngay và không sửa được câu trả lời nữa."
+                : `Còn ${unanswered} câu chưa trả lời sẽ tính 0 điểm. Bài sẽ được chấm ngay và không sửa được nữa.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Làm tiếp</AlertDialogCancel>
+            <AlertDialogAction onClick={onSubmit}>Nộp bài</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
+  );
+}
+
+/** Where "nộp bài" lands: the student's own summary for this Quiz. */
+function summaryHref(slug: string): string {
+  return `/q/${slug}/ket-qua`;
 }
 
 function QuestionPanel({

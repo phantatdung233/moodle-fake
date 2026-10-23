@@ -5,9 +5,15 @@
  * belongs to the MSSV it was asked for.
  */
 import mongoose from "mongoose";
-import { Attempt, type AttemptDocument, type AttemptStatus } from "./attempt.model";
-import { gradeAnswer, type BlankGrade, type AttemptAnswer } from "./grading";
-import { Quiz, type QuizMode, type QuizQuestion } from "./quiz.model";
+import {
+  Attempt,
+  type AttemptDocument,
+  type AttemptQuestionResult,
+  type AttemptResult,
+  type AttemptStatus,
+} from "./attempt.model";
+import { gradeAnswer, gradeAttempt, type BlankGrade, type AttemptAnswer } from "./grading";
+import { Quiz, type QuizDocument, type QuizMode, type QuizQuestion } from "./quiz.model";
 import { connectToDatabase } from "@/lib/db";
 
 async function ensureConnection(): Promise<void> {
@@ -98,10 +104,26 @@ export async function resumeOrStartAttempt(input: StartAttemptInput): Promise<St
 
   const quiz = await Quiz.findById(input.quizId).lean();
   if (!quiz) return { ok: false, error: "Không tìm thấy đề." };
+  // Only a published Quiz is open: a draft is still being edited and an
+  // archived one is closed to new Attempts (Spec, "Publish state machine").
+  if (quiz.status !== "published") return { ok: false, error: QUIZ_NOT_OPEN_ERROR };
 
   const existing = await Attempt.findOne({ studentId, quizId: quiz._id, status: "in_progress" });
   if (existing) {
     return { ok: true, attempt: toView(existing.toObject()), resumed: true };
+  }
+
+  // Every finished Attempt counts, expired included: a student past their
+  // deadline has used that attempt up (Spec, user story 59).
+  if (quiz.mode === "exam" && quiz.maxAttempts && quiz.maxAttempts > 0) {
+    const used = await Attempt.countDocuments({
+      studentId,
+      quizId: quiz._id,
+      status: { $in: ["submitted", "expired"] },
+    });
+    if (used >= quiz.maxAttempts) {
+      return { ok: false, error: exhaustedAttemptsError(quiz.maxAttempts) };
+    }
   }
 
   const startedAt = new Date();
@@ -120,7 +142,8 @@ export async function resumeOrStartAttempt(input: StartAttemptInput): Promise<St
       startedAt,
       ...(deadline ? { deadline } : {}),
       // Freeze the Questions: a later Quiz version must not change this paper.
-      questionsSnapshot: quiz.questions,
+      // A published Quiz only carries the Questions its publish let through.
+      questionsSnapshot: quiz.questions.filter((question) => question.enabled),
       answers: [],
     });
     return { ok: true, attempt: toView(created.toObject()), resumed: false };
@@ -144,6 +167,14 @@ export type AnswerResult = { ok: true } | { ok: false; error: string };
 export const NOT_YOUR_ATTEMPT_ERROR = "Bạn không có quyền làm bài này.";
 export const QUESTION_NOT_FOUND_ERROR = "Không tìm thấy câu hỏi trong bài.";
 export const REVEALED_LOCKED_ERROR = "Câu này đã khoá sau khi xem đáp án nên không sửa được nữa.";
+export const SUBMITTED_LOCKED_ERROR = "Bài đã nộp nên không sửa được câu trả lời nữa.";
+export const TIME_UP_ERROR = "Đã hết giờ làm bài nên không sửa được câu trả lời nữa.";
+export const QUIZ_NOT_OPEN_ERROR = "Đề này chưa mở cho sinh viên làm.";
+
+/** "Bạn đã hết 2 lần làm đề này." — user story 59. */
+export function exhaustedAttemptsError(maxAttempts: number): string {
+  return `Bạn đã hết ${maxAttempts} lần làm đề này.`;
+}
 
 async function loadOwnedAttempt(attemptId: string, studentId: string) {
   if (!mongoose.isValidObjectId(attemptId)) return null;
@@ -199,6 +230,11 @@ export async function answerQuestion(input: AnswerInput): Promise<AnswerResult> 
   const question = attempt.questionsSnapshot.find((candidate) => candidate.id === input.questionId);
   if (!question) return { ok: false, error: QUESTION_NOT_FOUND_ERROR };
 
+  if (attempt.status !== "in_progress") return { ok: false, error: SUBMITTED_LOCKED_ERROR };
+  if (attempt.deadline && attempt.deadline.getTime() <= Date.now()) {
+    return { ok: false, error: TIME_UP_ERROR };
+  }
+
   const current = attempt.answers.find((answer) => answer.questionId === input.questionId);
   if (current?.revealed) return { ok: false, error: REVEALED_LOCKED_ERROR };
 
@@ -246,6 +282,7 @@ export async function revealQuestion(input: {
   if (attempt.mode === "exam") {
     return { ok: false, error: "Chế độ kiểm tra chỉ xem đáp án sau khi nộp bài." };
   }
+  if (attempt.status !== "in_progress") return { ok: false, error: SUBMITTED_LOCKED_ERROR };
 
   const answers = attempt.answers.map((answer) => ({
     questionId: answer.questionId,
@@ -294,4 +331,203 @@ export async function revealQuestion(input: {
 
 function isDuplicateKeyError(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: number }).code === 11000;
+}
+
+export type SubmitResult =
+  | { ok: true; status: "submitted" | "expired"; result: AttemptResult }
+  | { ok: false; error: string };
+
+/**
+ * Grades the Attempt once with `gradeAttempt` and stores the result, then locks
+ * every answer. `gradeAttempt` walks the Attempt's own `questionsSnapshot`, so
+ * an admin publishing a new version cannot change a paper mid-flight.
+ *
+ * Idempotent: the grading write is guarded by `status: "in_progress"`, and a
+ * second submit returns the stored result instead of grading again. When the
+ * Attempt was past its `deadline` it is stored as `expired`, which is how the
+ * auto-submit path records itself (Spec, "Làm bài").
+ */
+export async function submitAttempt(input: {
+  attemptId: string;
+  studentId: string;
+}): Promise<SubmitResult> {
+  const attempt = await loadOwnedAttempt(input.attemptId, input.studentId);
+  if (!attempt) return { ok: false, error: NOT_YOUR_ATTEMPT_ERROR };
+
+  if (attempt.status !== "in_progress" && attempt.result) {
+    return {
+      ok: true,
+      status: attempt.status === "expired" ? "expired" : "submitted",
+      result: toResult(attempt.result),
+    };
+  }
+
+  const submittedAt = new Date();
+  const expired = attempt.deadline !== undefined && attempt.deadline.getTime() <= submittedAt.getTime();
+  // `quiz.questions` must be the frozen snapshot: grading counts exactly the
+  // Questions the sinh viên saw, enabled or not (a published Quiz is all enabled).
+  const grade = gradeAttempt(
+    { ...toQuizForGrading(attempt.toObject()) },
+    attempt.answers.map((answer) => ({
+      questionId: answer.questionId,
+      selectedOptionKeys: [...answer.selectedOptionKeys],
+      blankValues: [...answer.blankValues],
+    })),
+  );
+  const result: AttemptResult = { total: grade.total, perQuestion: grade.perQuestion, submittedAt };
+
+  const lockedAnswers = attempt.answers.map((answer) => ({
+    questionId: answer.questionId,
+    selectedOptionKeys: [...answer.selectedOptionKeys],
+    blankValues: [...answer.blankValues],
+    revealed: true,
+    graded:
+      answer.graded ??
+      gradedFor(grade.perQuestion.find((entry) => entry.questionId === answer.questionId)),
+  }));
+
+  const updated = await Attempt.findOneAndUpdate(
+    { _id: attempt._id, status: "in_progress" },
+    {
+      $set: {
+        status: expired ? "expired" : "submitted",
+        submittedAt,
+        result,
+        answers: lockedAnswers,
+      },
+    },
+    { returnDocument: "after" },
+  );
+
+  // Lost the race with a concurrent submit: return what the winner stored.
+  if (!updated) {
+    const winner = await Attempt.findById(attempt._id);
+    if (!winner?.result) return { ok: false, error: NOT_YOUR_ATTEMPT_ERROR };
+    return {
+      ok: true,
+      status: winner.status === "expired" ? "expired" : "submitted",
+      result: toResult(winner.result),
+    };
+  }
+
+  return { ok: true, status: expired ? "expired" : "submitted", result: toResult(result) };
+}
+
+function gradedFor(entry: AttemptQuestionResult | undefined) {
+  if (!entry) return undefined;
+  return {
+    correct: entry.correct,
+    score: entry.score,
+    ...(entry.perBlank ? { perBlank: entry.perBlank.map((blank) => ({ ...blank })) } : {}),
+  };
+}
+
+/** Only the fields `gradeAttempt` reads; the snapshot stands in for `questions`. */
+function toQuizForGrading(attempt: AttemptDocument): QuizDocument {
+  return {
+    title: "",
+    slug: attempt.quizSlug,
+    mode: attempt.mode,
+    status: "published",
+    questions: attempt.questionsSnapshot,
+    version: attempt.quizVersion,
+    createdAt: attempt.createdAt,
+    updatedAt: attempt.updatedAt,
+  };
+}
+
+function toResult(result: AttemptDocument["result"]): AttemptResult {
+  if (!result) return { total: 0, perQuestion: [] };
+  return {
+    total: result.total,
+    perQuestion: (result.perQuestion ?? []).map((entry) => ({
+      questionId: entry.questionId,
+      score: entry.score,
+      correct: entry.correct,
+      ...(entry.perBlank
+        ? { perBlank: entry.perBlank.map((blank) => ({ ...blank })) }
+        : {}),
+    })),
+    ...(result.submittedAt ? { submittedAt: result.submittedAt } : {}),
+  };
+}
+
+/**
+ * Server-side auto-submit for an exam Attempt whose `deadline` has passed.
+ * Called on every load of `/q/<slug>` so a sinh viên who closes the tab and
+ * comes back later still sees their paper submitted. Returns the Attempt as it
+ * stands (submitted, expired, or still open) or `null` for a non-owner.
+ */
+export async function submitExpiredIfDue(input: {
+  attemptId: string;
+  studentId: string;
+}): Promise<AttemptView | null> {
+  const attempt = await loadOwnedAttempt(input.attemptId, input.studentId);
+  if (!attempt) return null;
+
+  if (attempt.status === "in_progress" && attempt.deadline && attempt.deadline.getTime() <= Date.now()) {
+    await submitAttempt(input);
+    const refreshed = await loadOwnedAttempt(input.attemptId, input.studentId);
+    return refreshed ? toView(refreshed.toObject()) : null;
+  }
+
+  return toView(attempt.toObject());
+}
+
+/** What a sinh viên may see on their own summary page for one Quiz. */
+export type AttemptSummary = {
+  quizId: string;
+  quizSlug: string;
+  quizTitle: string;
+  mode: QuizMode;
+  /** The Attempt just finished, if any: the one this browser is looking at. */
+  latest: AttemptView | null;
+  /** Finished Attempts (submitted + expired), newest first — the student's own history only. */
+  history: AttemptView[];
+  attemptCount: number;
+  maxAttempts?: number;
+  /** True when the giảng viên's limit has already been used up. */
+  attemptsExhausted: boolean;
+  /** True when starting an Attempt right now is allowed (published, limit left). */
+  canStartNew: boolean;
+};
+
+/**
+ * The sinh viên's own view of a Quiz's Attempts. Never returns another MSSV's
+ * rows (Spec, user story 58): the studentId argument comes from the signed
+ * cookie, not the URL.
+ */
+export async function getSummaryForStudent(
+  quizId: string,
+  studentId: string,
+  attemptId?: string,
+): Promise<AttemptSummary | null> {
+  if (!mongoose.isValidObjectId(quizId)) return null;
+  await ensureConnection();
+
+  const quiz = await Quiz.findById(quizId).select("title slug mode status maxAttempts").lean();
+  if (!quiz) return null;
+
+  const normalized = normalizeStudentId(studentId);
+  const docs = await Attempt.find({ quizId: quiz._id, studentId: normalized })
+    .sort({ startedAt: -1, _id: -1 })
+    .lean();
+  const attempts = docs.map((doc) => toView(doc));
+  const finished = attempts.filter((attempt) => attempt.status !== "in_progress");
+  const maxAttempts = quiz.maxAttempts ?? undefined;
+  const attemptsExhausted =
+    quiz.mode === "exam" && maxAttempts !== undefined && finished.length >= maxAttempts;
+
+  return {
+    quizId: String(quiz._id),
+    quizSlug: quiz.slug,
+    quizTitle: quiz.title,
+    mode: quiz.mode,
+    latest: (attemptId ? attempts.find((attempt) => attempt.id === attemptId) : undefined) ?? finished[0] ?? null,
+    history: finished,
+    attemptCount: finished.length,
+    ...(maxAttempts !== undefined ? { maxAttempts } : {}),
+    attemptsExhausted,
+    canStartNew: quiz.status === "published" && !attemptsExhausted,
+  };
 }
