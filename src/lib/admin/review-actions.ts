@@ -1,16 +1,13 @@
 "use server";
 
 /**
- * Server actions behind the answer-review page. Each one checks the admin
- * session itself (middleware is a UX gate, not a security boundary), validates
- * its input and, only after a write, revalidates the review and detail pages.
+ * Server actions behind the answer-review page. Each one goes through
+ * `withAdminAction` (middleware is a UX gate, not a security boundary), validates its
+ * input and, only after a write, revalidates the review and detail pages.
  */
 import { revalidatePath } from "next/cache";
-import { hasAdminSession } from "@/lib/admin/session";
-import {
-  INVALID_ANSWER_ERROR,
-  NO_SESSION_ERROR,
-} from "@/lib/admin/review-messages";
+import { INVALID_ANSWER_ERROR } from "@/lib/admin/review-messages";
+import { withAdminAction } from "@/lib/admin/with-admin";
 import {
   removeQuestionFromQuiz,
   saveQuestionAnswer,
@@ -52,13 +49,11 @@ function revalidateReview(quizId: string): void {
 }
 
 /** Records the giảng viên's answer and hands back the next Question to review. */
-export async function reviewAnswer(
+export const reviewAnswer = withAdminAction(async function reviewAnswer(
   quizId: string,
   questionId: string,
   answer: unknown,
 ): Promise<ReviewActionResult> {
-  if (!(await hasAdminSession())) return { ok: false, error: NO_SESSION_ERROR };
-
   const input = validateAnswer(answer);
   if (!input) return { ok: false, error: INVALID_ANSWER_ERROR };
 
@@ -67,14 +62,13 @@ export async function reviewAnswer(
 
   revalidateReview(quizId);
   return result;
-}
+});
 
 /** Soft-removes a Question from the Quiz (`enabled: false`, history kept). */
-export async function reviewRemoveQuestion(
+export const reviewRemoveQuestion = withAdminAction(async function reviewRemoveQuestion(
   quizId: string,
   questionId: string,
 ): Promise<ReviewActionResult> {
-  if (!(await hasAdminSession())) return { ok: false, error: NO_SESSION_ERROR };
   if (typeof questionId !== "string" || questionId === "") {
     return { ok: false, error: "Không tìm thấy câu hỏi này trong đề." };
   }
@@ -84,4 +78,4 @@ export async function reviewRemoveQuestion(
 
   revalidateReview(quizId);
   return result;
-}
+});

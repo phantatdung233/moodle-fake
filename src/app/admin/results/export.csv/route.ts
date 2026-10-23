@@ -3,10 +3,11 @@
  * opens in Excel.
  *
  * Same filter as `/admin/results` (`quizId`, `studentId`), no row cap. The
- * admin cookie is checked here too: middleware is a UX gate, not the security
- * boundary. The body starts with a UTF-8 BOM so Excel decodes Vietnamese.
+ * admin cookie is checked here too (middleware is a UX gate, not the security
+ * boundary). The body starts with a UTF-8 BOM so Excel decodes Vietnamese.
  */
 import type { NextRequest } from "next/server";
+import { NO_SESSION_ERROR } from "@/lib/admin/review-messages";
 import { hasAdminSession } from "@/lib/admin/session";
 import { exportResultsCsv } from "@/lib/admin/results-csv-export";
 import { csvFileName } from "@/lib/admin/results-csv";
@@ -17,13 +18,15 @@ export const dynamic = "force-dynamic";
 
 const BOM = "\uFEFF";
 
+function textResponse(body: string, status: number): Response {
+  return new Response(body, {
+    status,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
 export async function GET(request: NextRequest): Promise<Response> {
-  if (!(await hasAdminSession())) {
-    return new Response("Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại rồi thử lại.", {
-      status: 401,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    });
-  }
+  if (!(await hasAdminSession())) return textResponse(NO_SESSION_ERROR, 401);
 
   const params = request.nextUrl.searchParams;
   const quizId = params.get("quizId")?.trim() || undefined;
@@ -35,10 +38,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     body = await exportResultsCsv({ quizId, studentId });
     if (quizId) quizTitle = (await getQuizForAdmin(quizId))?.title ?? null;
   } catch {
-    return new Response("Không đọc được kết quả. Kiểm tra kết nối rồi thử lại.", {
-      status: 503,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    });
+    return textResponse("Không đọc được kết quả. Kiểm tra kết nối rồi thử lại.", 503);
   }
 
   return new Response(`${BOM}${body}`, {

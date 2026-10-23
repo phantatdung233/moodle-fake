@@ -122,7 +122,7 @@ describe("admin upload server actions", () => {
       error: "Slug “python-co-ban” đã được dùng cho đề khác. Hãy chọn slug khác.",
     });
     // The preview survives the failed confirm so the giảng viên only fixes the slug.
-    expect(state?.preview?.questions).toBe(180);
+    expect(state && "preview" in state ? state.preview?.questions : undefined).toBe(180);
     expect(await Quiz.countDocuments()).toBe(1);
   });
 

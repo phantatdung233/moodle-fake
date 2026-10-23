@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { previewQuizUpload, uploadFileFromPayload } from "@/lib/admin/upload";
 import type { UploadFilePayload } from "@/lib/admin/upload-file";
-import { hasAdminSession } from "@/lib/admin/session";
+import { NO_SESSION_ERROR } from "@/lib/admin/review-messages";
+import { withAdmin } from "@/lib/admin/with-admin";
 import { createDraftQuizFromQuestions } from "@/lib/quiz/repository";
 import type { MoodleQuestionError, QuizParseStats } from "@/lib/quiz/parser";
 
@@ -34,9 +35,6 @@ export type ConfirmUploadInput = {
   title: string;
   slug: string;
 };
-
-const NO_SESSION_ERROR =
-  "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại rồi thử lại.";
 
 function readFile(formData: FormData): File | null {
   const value = formData.get("file");
@@ -85,30 +83,31 @@ export async function previewUpload(
  * a hydrated Next runtime carries only one useActionState action per form, and
  * step 1 already owns it. Wrap it before calling — see `ConfirmUploadResult`.
  */
-export async function confirmUpload(
-  payload: UploadFilePayload,
-  input: ConfirmUploadInput,
-): Promise<ConfirmUploadResult> {
-  if (!(await hasAdminSession())) {
-    return { error: NO_SESSION_ERROR };
-  }
+export const confirmUpload = withAdmin(
+  async function confirmUpload(
+    payload: UploadFilePayload,
+    input: ConfirmUploadInput,
+  ): Promise<ConfirmUploadResult> {
+    const preview = await previewQuizUpload(uploadFileFromPayload(payload));
+    if (!preview.ok) {
+      return { error: preview.error };
+    }
 
-  const preview = await previewQuizUpload(uploadFileFromPayload(payload));
-  if (!preview.ok) {
-    return { error: preview.error };
-  }
+    const result = await createDraftQuizFromQuestions({
+      title: input.title,
+      slug: input.slug,
+      questions: preview.questions,
+    });
 
-  const result = await createDraftQuizFromQuestions({
-    title: input.title,
-    slug: input.slug,
-    questions: preview.questions,
-  });
+    if (!result.ok) {
+      // Keep the preview on screen so only the title/slug needs fixing.
+      return { preview: toPreview(preview.stats, preview.errors), error: result.error };
+    }
 
-  if (!result.ok) {
-    // Keep the preview on screen so only the title/slug needs fixing.
-    return { preview: toPreview(preview.stats, preview.errors), error: result.error };
-  }
-
-  revalidatePath("/admin");
-  redirect(`/admin/quizzes/${result.quizId}`);
-}
+    revalidatePath("/admin");
+    redirect(`/admin/quizzes/${result.quizId}`);
+  },
+  // No session (rare: middleware already gates the page): keep the preview
+  // step on screen with the same message every admin action uses.
+  () => ({ error: NO_SESSION_ERROR }) satisfies UploadState,
+);
