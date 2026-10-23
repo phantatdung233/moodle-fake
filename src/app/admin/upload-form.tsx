@@ -1,94 +1,121 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { slugifyTitle } from "@/lib/quiz/slug";
-import { confirmUpload, previewUpload, type UploadState } from "@/lib/admin/upload-actions";
+import { toUploadFilePayload } from "@/lib/admin/upload-file";
+import {
+  confirmUpload,
+  previewUpload,
+  type ConfirmUploadInput,
+  type QuizUploadPreview,
+  type UploadState,
+} from "@/lib/admin/upload-actions";
 
 const initialState: UploadState = {};
 
 /**
- * Upload in two steps: "Xem trước" posts the file alone and returns counts and
- * parse errors; "Tạo đề nháp" posts the same file plus title/slug and creates a
- * new draft Quiz. The file input stays the same DOM node for both requests, so
- * the browser re-sends the chosen file without keeping its bytes in React state.
+ * Upload in two steps, each its own form:
+ * 1. "Xem trước" parses the chosen file and shows counts + parse errors. The
+ *    file bytes are re-sent by the browser, and the server keeps none of them.
+ * 2. "Tạo đề nháp" (in the preview) sends the same file with title/slug and
+ *    creates a new draft Quiz.
+ *
+ * Step 2 calls a plain action inside a transition instead of a second
+ * useActionState: a hydrated Next runtime carries over only one action state
+ * per form, and step 1 already owns it.
  */
 export function UploadForm() {
   const [previewState, previewAction, previewPending] = useActionState(
     previewUpload,
     initialState,
   );
-  const [confirmState, confirmAction, confirmPending] = useActionState(
-    confirmUpload,
-    initialState,
-  );
 
   const [file, setFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | undefined>();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   // The slug follows the title until the giảng viên edits it by hand.
   const [slugTouched, setSlugTouched] = useState(false);
+  const [confirmResult, setConfirmResult] = useState<UploadState | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
-  const preview = confirmState.preview ?? previewState.preview;
-  const error = confirmState.error ?? previewState.error;
+  // A failed confirm carries a fresh preview; prefer it over the earlier one.
+  const preview = confirmResult?.preview ?? previewState.preview;
+  const error = fileError ?? confirmResult?.error ?? previewState.error;
 
   function onTitleChange(value: string) {
     setTitle(value);
     if (!slugTouched) setSlug(slugifyTitle(value));
   }
 
-  return (
-    <form action={previewAction} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="file">File JSON xuất từ Moodle</Label>
-        <Input
-          id="file"
-          name="file"
-          type="file"
-          accept="application/json,.json"
-          required
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          className="h-auto py-1.5 file:mr-2"
-        />
-        <p className="text-xs text-muted-foreground">
-          Tối đa 5 MB. Hệ thống chỉ đọc file, chưa lưu gì cho tới khi bạn bấm “Tạo đề
-          nháp”.
-        </p>
-      </div>
+  function onChooseAnotherFile() {
+    setFile(null);
+    setFileError(undefined);
+    setConfirmResult(null);
+  }
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="title">Tên đề</Label>
-          <Input
-            id="title"
-            name="title"
-            value={title}
-            onChange={(event) => onTitleChange(event.target.value)}
-            placeholder="Python cơ bản"
-          />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="slug">Slug (đường dẫn)</Label>
-          <Input
-            id="slug"
-            name="slug"
-            value={slug}
-            onChange={(event) => {
-              setSlugTouched(true);
-              setSlug(event.target.value);
-            }}
-            placeholder="python-co-ban"
-            pattern="[a-z0-9]+(-[a-z0-9]+)*"
-            aria-invalid={error ? true : undefined}
-          />
-          <p className="text-xs break-all text-muted-foreground">
-            Sinh viên vào làm tại <code className="font-mono">/q/{slug || "…"}</code>
-          </p>
-        </div>
-      </div>
+  async function onConfirm(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (confirming) return;
+    if (!file) {
+      setFileError("Hãy chọn một file JSON để tải lên.");
+      return;
+    }
+
+    setFileError(undefined);
+    setConfirmResult(null);
+    setConfirming(true);
+    // The redirect the action performs is only followed inside a transition.
+    startTransition(async () => {
+      try {
+        // React does not carry a `File` through a reference, so send its bytes
+        // and metadata as plain fields the action rebuilds into a `File`.
+        const result = await confirmUpload(await toUploadFilePayload(file), {
+          title,
+          slug,
+        } satisfies ConfirmUploadInput);
+        // Success redirects; anything still returned is an error to show,
+        // keeping the preview on screen so only the title/slug needs fixing.
+        setConfirmResult(result?.error ? result : null);
+      } finally {
+        setConfirming(false);
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {preview ? null : (
+        <form action={previewAction} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="preview-file">File JSON xuất từ Moodle</Label>
+            <Input
+              id="preview-file"
+              name="file"
+              type="file"
+              accept="application/json,.json"
+              required
+              onChange={(event) => {
+                setFile(event.target.files?.[0] ?? null);
+                setFileError(undefined);
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Tối đa 5 MB. Hệ thống chỉ đọc file, chưa lưu gì cho tới khi bạn bấm
+              “Tạo đề nháp”.
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button type="submit" disabled={previewPending}>
+              {previewPending ? "Đang đọc file…" : "Xem trước"}
+            </Button>
+          </div>
+        </form>
+      )}
 
       {error ? (
         <p role="alert" className="text-sm font-medium text-destructive">
@@ -96,37 +123,78 @@ export function UploadForm() {
         </p>
       ) : null}
 
-      {preview ? <QuizPreviewSummary preview={preview} /> : null}
+      {preview ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium">
+              Xem trước {file ? `file “${file.name}”` : "file đã tải lên"}
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={onChooseAnotherFile}>
+              Chọn file khác
+            </Button>
+          </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button
-          type="submit"
-          variant={preview ? "outline" : "default"}
-          disabled={previewPending || confirmPending || !file}
-        >
-          {previewPending ? "Đang đọc file…" : preview ? "Xem lại file" : "Xem trước"}
-        </Button>
-        {preview ? (
-          <Button
-            type="submit"
-            formAction={confirmAction}
-            disabled={previewPending || confirmPending}
-          >
-            {confirmPending ? "Đang tạo đề…" : "Tạo đề nháp"}
-          </Button>
-        ) : null}
-      </div>
-    </form>
+          <QuizPreviewSummary preview={preview} />
+
+          <form onSubmit={onConfirm} className="flex flex-col gap-4 border-t pt-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="title">Tên đề</Label>
+                <Input
+                  id="title"
+                  name="title"
+                  value={title}
+                  onChange={(event) => onTitleChange(event.target.value)}
+                  placeholder="Python cơ bản"
+                  required
+                  maxLength={200}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="slug">Slug (đường dẫn)</Label>
+                <Input
+                  id="slug"
+                  name="slug"
+                  value={slug}
+                  onChange={(event) => {
+                    setSlugTouched(true);
+                    setSlug(event.target.value);
+                  }}
+                  placeholder="python-co-ban"
+                  pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                  required
+                  aria-invalid={confirmResult?.error ? true : undefined}
+                />
+                <p className="text-xs break-all text-muted-foreground">
+                  Sinh viên vào làm tại{" "}
+                  <code className="font-mono">/q/{slug || "…"}</code>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                {preview.needsReview} câu cần duyệt đáp án sẽ được lưu ở trạng thái
+                nháp.
+              </p>
+              <Button type="submit" disabled={confirming}>
+                {confirming ? "Đang tạo đề…" : "Tạo đề nháp"}
+              </Button>
+            </div>
+          </form>
+        </>
+      ) : null}
+    </div>
   );
 }
 
-function QuizPreviewSummary({ preview }: { preview: NonNullable<UploadState["preview"]> }) {
+function QuizPreviewSummary({ preview }: { preview: QuizUploadPreview }) {
   const ready = preview.questions - preview.needsReview;
   const [showAllErrors, setShowAllErrors] = useState(false);
   const errors = showAllErrors ? preview.errors : preview.errors.slice(0, 10);
 
   return (
-    <div className="flex flex-col gap-3 border-t pt-4 text-sm">
+    <div className="flex flex-col gap-3 text-sm">
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Tổng câu" value={preview.questions} />
         <Stat label="Trắc nghiệm" value={preview.byType.multichoice} />
