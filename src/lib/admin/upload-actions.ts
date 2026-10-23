@@ -2,7 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { previewQuizUpload } from "@/lib/admin/upload";
+import { ADMIN_SESSION_COOKIE, readAdminSession } from "@/lib/admin/session";
 import { createDraftQuizFromQuestions } from "@/lib/quiz/repository";
 import type { MoodleQuestionError, QuizParseStats } from "@/lib/quiz/parser";
 
@@ -20,6 +22,18 @@ export type UploadState = {
 function readFile(formData: FormData): File | null {
   const value = formData.get("file");
   return value instanceof File ? value : null;
+}
+
+const NO_SESSION_ERROR =
+  "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại rồi thử lại.";
+
+/**
+ * Middleware already blocks `/admin/**`, but a server action is reachable by
+ * anyone who can POST to it, so the action that writes checks the session too.
+ */
+async function hasAdminSession(): Promise<boolean> {
+  const cookieStore = await cookies();
+  return readAdminSession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value);
 }
 
 function toPreviewState(stats: QuizParseStats, errors: MoodleQuestionError[]): UploadState {
@@ -63,6 +77,10 @@ export async function confirmUpload(
   _prevState: UploadState,
   formData: FormData,
 ): Promise<UploadState> {
+  if (!(await hasAdminSession())) {
+    return { error: NO_SESSION_ERROR };
+  }
+
   const file = readFile(formData);
   if (!file) {
     return { error: "Hãy chọn lại file JSON rồi thử lại." };
