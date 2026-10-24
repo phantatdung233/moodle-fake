@@ -2,7 +2,7 @@
  * `POST /api/explain` — stream giải thích AI cho một Question (Spec, "AI").
  *
  * Luồng: cookie sinh viên → Attempt → Question trong snapshot (hash do server
- * quyết định) → cache hoặc stream. Response luôn là `text/event-stream` gồm các
+ * quyết định) → lưu kết quả hoặc stream. Response luôn là `text/event-stream` gồm các
  * frame `{text}` / `{error}` / `{done}`; lỗi thiếu key hay model hỏng vẫn là
  * frame lỗi mềm, chưa bao giờ là 500 kèm stack trace.
  */
@@ -12,6 +12,7 @@ import { cookies } from "next/headers";
 import { readStudentSession, STUDENT_SESSION_COOKIE } from "@/lib/student/session";
 import { explainQuestion, EXPLANATION } from "@/lib/gemini/explain";
 import { hashMatches, questionForExplanation } from "@/lib/gemini/explanation-question";
+import { saveAttemptExplanation } from "@/lib/quiz/attempt-repository";
 import { encodeFrame, encodeFrames, readExplanationRequest, type ExplanationFrame } from "@/lib/gemini/request";
 
 export const runtime = "nodejs";
@@ -83,12 +84,31 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   const encoder = new TextEncoder();
   const frames = result.stream[Symbol.asyncIterator]();
+  const chunks: string[] = [];
+  let failed = false;
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
         const { done, value } = await frames.next();
-        if (!done && value) controller.enqueue(encoder.encode(encodeFrame(value)));
+        if (!done && value) {
+          if (value.text) chunks.push(value.text);
+          if (value.error) failed = true;
+          controller.enqueue(encoder.encode(encodeFrame(value)));
+        }
         if (done) {
+          if (result.ok && !failed && chunks.join("").trim() !== "") {
+            const saved = await saveAttemptExplanation({
+              attemptId: body.attemptId,
+              studentId: identity.studentId,
+              questionId: body.questionId,
+              explanation: chunks.join(""),
+            });
+            if (!saved) {
+              controller.enqueue(
+                encoder.encode(encodeFrame({ error: "Không lưu được giải thích." })),
+              );
+            }
+          }
           controller.enqueue(encoder.encode(encodeFrame({}, true)));
           controller.close();
         }
@@ -100,7 +120,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     },
     async cancel() {
       // The browser navigated away: stop pulling from the model. The finishing
-      // frames never run, so a half-finished explanation is never cached.
+      // frames never run, so a half-finished explanation is never persisted.
       await frames.return?.();
     },
   });

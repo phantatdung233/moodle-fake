@@ -23,6 +23,7 @@ export type AttemptAnswer = {
   selectedOptionKeys: string[];
   /** By position, aligned with Question.blanks (blankValues[0] answers blanks[0]). */
   blankValues: string[];
+  explanation?: string;
 };
 
 export type AnswerGrade = {

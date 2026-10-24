@@ -9,6 +9,7 @@ export type AttemptStatus = "in_progress" | "submitted" | "expired";
 export type AttemptAnswerRecord = AttemptAnswer & {
   /** True once the Question is locked: practice revealed it, or the Attempt was submitted. */
   revealed: boolean;
+  explanation?: string;
   /** Filled in when the Question was revealed/submitted; absent while still open. */
   graded?: {
     correct: boolean;
@@ -77,6 +78,7 @@ const answerSchema = new mongoose.Schema<AttemptAnswerRecord>(
     selectedOptionKeys: { type: [String], default: [] },
     blankValues: { type: [String], default: [] },
     revealed: { type: Boolean, default: false },
+    explanation: { type: String },
     graded: {
       type: new mongoose.Schema(
         {

@@ -63,6 +63,7 @@ function toView(doc: AttemptDocument & { _id: mongoose.Types.ObjectId }): Attemp
       selectedOptionKeys: [...answer.selectedOptionKeys],
       blankValues: [...answer.blankValues],
       revealed: answer.revealed,
+      ...(answer.explanation !== undefined ? { explanation: answer.explanation } : {}),
       ...(answer.graded ? { graded: { ...answer.graded } } : {}),
     })),
     ...(doc.result ? { result: doc.result } : {}),
@@ -244,6 +245,39 @@ export async function answerQuestion(input: AnswerInput): Promise<AnswerResult> 
   return { ok: true };
 }
 
+export async function saveAttemptExplanation(input: {
+  attemptId: string;
+  studentId: string;
+  questionId: string;
+  explanation: string;
+}): Promise<boolean> {
+  const attempt = await loadOwnedAttempt(input.attemptId, input.studentId);
+  if (!attempt) return false;
+
+  const answer = attempt.answers.find(
+    (candidate) => candidate.questionId === input.questionId,
+  );
+  if (!answer) return false;
+
+  attempt.set(
+    "answers",
+    attempt.answers.map((entry) =>
+      entry.questionId === input.questionId
+        ? {
+            questionId: entry.questionId,
+            selectedOptionKeys: [...entry.selectedOptionKeys],
+            blankValues: [...entry.blankValues],
+            revealed: entry.revealed,
+            ...(entry.graded ? { graded: entry.graded } : {}),
+            explanation: input.explanation,
+          }
+        : entry,
+    ),
+  );
+  await attempt.save();
+  return true;
+}
+
 /** Everything the UI needs to show đúng/sai after a reveal. */
 export type RevealFeedback = {
   questionId: string;
@@ -285,6 +319,7 @@ export async function revealQuestion(input: {
     selectedOptionKeys: [...answer.selectedOptionKeys],
     blankValues: [...answer.blankValues],
     revealed: answer.revealed,
+    ...(answer.explanation !== undefined ? { explanation: answer.explanation } : {}),
   }));
   const existing = answers.find((answer) => answer.questionId === input.questionId);
   if (existing?.revealed) return { ok: false, error: "Câu này đã xem đáp án rồi." };
@@ -296,6 +331,7 @@ export async function revealQuestion(input: {
   const record = {
     ...saved,
     revealed: true,
+    ...(saved.explanation !== undefined ? { explanation: saved.explanation } : {}),
     graded: {
       correct: grade.correct,
       score: grade.score,
@@ -372,6 +408,7 @@ export async function submitAttempt(input: {
     selectedOptionKeys: [...answer.selectedOptionKeys],
     blankValues: [...answer.blankValues],
     revealed: true,
+    ...(answer.explanation !== undefined ? { explanation: answer.explanation } : {}),
     graded:
       answer.graded ??
       gradedFor(grade.perQuestion.find((entry) => entry.questionId === answer.questionId)),

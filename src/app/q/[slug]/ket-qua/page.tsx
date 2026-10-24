@@ -30,6 +30,7 @@ import { StudentHeader } from "@/components/student-header";
 import { cn } from "@/lib/utils";
 import { QuestionReview } from "./question-review";
 import { QuestionReviewBody } from "./question-review-body";
+import { QuestionReviewFilter } from "./question-review-filter";
 
 export const metadata: Metadata = {
   title: "Kết quả bài làm",
@@ -202,33 +203,45 @@ export function SummaryBody({
         <h2 id="review-heading" className="text-lg font-semibold">
           Xem lại từng câu
         </h2>
-        {attempt.result?.perQuestion.map((grade, index) => {
-          const question = attempt.questionsSnapshot.find(
-            (candidate) => candidate.id === grade.questionId,
-          );
-          if (!question) return null;
-          const answer = attempt.answers.find(
-            (entry) => entry.questionId === grade.questionId,
-          );
-          return (
-            <QuestionReview
-              key={grade.questionId}
-              attemptId={attempt.id}
-              index={index}
-              question={question}
-              grade={grade}
-              selectedOptionKeys={answer?.selectedOptionKeys ?? []}
-              blankValues={answer?.blankValues ?? []}
-              body={
-                <QuestionReviewBody
+        <QuestionReviewFilter>
+          {attempt.result?.perQuestion.map((grade, index) => {
+            const question = attempt.questionsSnapshot.find(
+              (candidate) => candidate.id === grade.questionId,
+            );
+            if (!question) return null;
+            const answer = attempt.answers.find(
+              (entry) => entry.questionId === grade.questionId,
+            );
+            const tone =
+              grade.correct
+                ? "correct"
+                : answer &&
+                    (answer.selectedOptionKeys.length > 0 ||
+                      answer.blankValues.some((value) => value.trim() !== ""))
+                  ? "wrong"
+                  : "blank";
+            return (
+              <div key={grade.questionId} data-filter-tone={tone}>
+                <QuestionReview
+                  attemptId={attempt.id}
+                  index={index}
                   question={question}
                   grade={grade}
+                  selectedOptionKeys={answer?.selectedOptionKeys ?? []}
                   blankValues={answer?.blankValues ?? []}
+                  explanation={answer?.explanation}
+                  body={
+                    <QuestionReviewBody
+                      question={question}
+                      grade={grade}
+                      blankValues={answer?.blankValues ?? []}
+                    />
+                  }
                 />
-              }
-            />
-          );
-        })}
+              </div>
+            );
+          })}
+        </QuestionReviewFilter>
       </section>
 
       {summary.history.length > 1 ? (
