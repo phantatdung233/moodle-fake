@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminDatabaseError, AdminHeader } from "@/app/admin/admin-header";
 import { QuestionReview } from "@/app/q/[slug]/ket-qua/question-review";
+import { QuestionReviewBody } from "@/app/q/[slug]/ket-qua/question-review-body";
 
 export const metadata: Metadata = {
   title: "Chi tiết lượt làm",
@@ -143,6 +144,13 @@ export default async function AttemptDetailPage({ params }: Props) {
               grade={grade}
               selectedOptionKeys={entry.selectedOptionKeys}
               blankValues={entry.blankValues}
+              body={
+                <QuestionReviewBody
+                  question={entry.question}
+                  grade={grade}
+                  blankValues={entry.blankValues}
+                />
+              }
               explanation={open ? undefined : entry.explanation}
             />
           );

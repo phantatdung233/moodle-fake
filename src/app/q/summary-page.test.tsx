@@ -118,6 +118,7 @@ const CLIENT_COMPONENTS = [
   "QuizSettingsForm",
   "QuestionSelectionList",
   "ExplanationPanel",
+  "QuestionReview",
   "SubmitPaper",
 ];
 
@@ -172,9 +173,31 @@ describe("summary page", () => {
     expect(html).toMatch(/Đúng<\/dt>[\s\S]*?<dd[^>]*>1<\/dd>/);
     expect(html).toMatch(/Sai<\/dt>[\s\S]*?<dd[^>]*>0<\/dd>/);
     expect(html).toMatch(/Bỏ trống<\/dt>[\s\S]*?<dd[^>]*>4<\/dd>/);
-    expect(html).toContain("đáp án đúng");
-    // One explanation panel per Question (`client:` wrapper).
-    expect(html.match(/questionHash=/g)).toHaveLength(5);
+    expect(html.match(/<client:QuestionReview /g)).toHaveLength(5);
+  });
+
+  it("mỗi câu mang theo đáp án của sinh viên để mở ra xem", async () => {
+    const started = await resumeOrStartAttempt({ quizId, studentId: "B2012345", studentName: "An" });
+    if (!started.ok) throw new Error(started.error);
+    // Q001: "e" is the correct option; Q002..Q005 stay blank.
+    await answerQuestion({
+      attemptId: started.attempt.id,
+      studentId: "B2012345",
+      questionId: "Q001",
+      selectedOptionKeys: ["e"],
+      blankValues: [],
+    });
+    await submitAttempt({ attemptId: started.attempt.id, studentId: "B2012345" });
+    await signInAs("B2012345");
+
+    const html = render(await resolveTree(await SummaryPage({ params: Promise.resolve({ slug: "python-co-ban" }) })));
+
+    // The review is a client component: what the sinh viên picked travels to
+    // it as a prop, and the highlighted body is rendered on the server.
+    expect(html).toContain("selectedOptionKeys");
+    expect(html).toContain("body=");
+    // No stored explanation on the student's page: the AI panel is offered.
+    expect(html).not.toContain("explanation=");
   });
 
   it("mỗi câu có một panel giải thích, không mang theo văn bản cũ", async () => {

@@ -45,6 +45,7 @@ async function resolveTree(node: unknown): Promise<unknown> {
     const name = element.type.name ?? "";
     // Client components render only in the browser (hooks).
     if (name.startsWith("ExplanationPanel")) return { ...rebuilt, type: `client:${name}` };
+    if (name.startsWith("QuestionReview")) return { ...rebuilt, type: `client:${name}` };
     return resolveTree(await (element.type as (props: unknown) => unknown)(rebuilt.props));
   }
   return rebuilt;
@@ -94,12 +95,13 @@ describe("/admin/results/[attemptId]", () => {
 
     expect(markup).toContain("B2012345");
     expect(markup).toContain("Python cơ bản");
-    expect(markup).toContain("Câu 1");
-    expect(markup).toContain("Câu 3");
-    expect(markup).toContain("đáp án đúng");
-    expect(markup).toContain("bạn chọn");
+    // The review itself is a client component, so this server pass hands it the
+    // graded answer per Question; the body (the Question text) is a server
+    // element rendered here and carried in the `body` prop.
+    expect(markup).toContain('index="0"');
+    expect(markup).toContain('index="2"');
+    expect(markup.match(/<client:QuestionReview /g)).toHaveLength(3);
     expect(markup).toContain("Điểm: 33,3%");
-    expect(markup).toContain("1 điểm");
   });
 
   it("không hiện giải thích nào đã lưu: chi tiết lượt làm chỉ có phần chấm", async () => {
@@ -109,8 +111,9 @@ describe("/admin/results/[attemptId]", () => {
 
     const markup = await html(started.attempt.id);
 
-    expect(markup).toContain("Giải thích");
-    expect(markup).toContain("Chưa có giải thích");
+    // Reading an old paper never calls the model: the stored explanation (here
+    // missing) is handed in, and no AI panel is mounted.
+    expect(markup).not.toContain("questionHash=");
   });
 
   it("báo chưa có bài khi id không tồn tại", async () => {

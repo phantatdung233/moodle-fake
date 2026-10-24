@@ -37,6 +37,11 @@ export type ExplanationPanelProps = {
    * gets a complete verdict line.
    */
   context?: ExplanationContext;
+  /**
+   * Called once the first text arrives. The summary page uses it to put the
+   * explanation in place of the revealed answers instead of under them.
+   */
+  onLoaded?: () => void;
   className?: string;
 };
 
@@ -51,9 +56,11 @@ export function ExplanationPanel({
   questionHash,
   mode = "practice",
   context,
+  onLoaded,
   className,
 }: ExplanationPanelProps) {
   const [text, setText] = useState("");
+  const announced = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   // A retry or a jump to another Question must abandon the previous request.
@@ -86,6 +93,10 @@ export function ExplanationPanel({
         if (frame.text) {
           received += frame.text;
           setText(received);
+          if (!announced.current) {
+            announced.current = true;
+            onLoaded?.();
+          }
         }
         if (frame.error) failure = frame.error;
       }
@@ -106,10 +117,27 @@ export function ExplanationPanel({
       setError(NETWORK_ERROR);
       setStatus("error");
     }
-  }, [attemptId, questionId, questionHash]);
+  }, [attemptId, questionId, questionHash, onLoaded]);
 
   if (mode === "none") return null;
   const streaming = status === "streaming";
+
+  // Summary: one unobtrusive trigger under the graded answer. The panel's own
+  // dashed card and heading are dropped — the answer is already visible, and a
+  // second card per Question just made the page long.
+  if (mode === "summary" && status === "idle") {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => void load()}
+        className="-ml-2 self-start text-muted-foreground"
+      >
+        <Sparkles aria-hidden /> Giải thích bằng AI
+      </Button>
+    );
+  }
 
   return (
     <section

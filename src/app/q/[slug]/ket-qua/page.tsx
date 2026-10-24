@@ -29,6 +29,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { StudentHeader } from "@/components/student-header";
 import { cn } from "@/lib/utils";
 import { QuestionReview } from "./question-review";
+import { QuestionReviewBody } from "./question-review-body";
 
 export const metadata: Metadata = {
   title: "Kết quả bài làm",
@@ -226,6 +227,13 @@ export function SummaryBody({
               grade={grade}
               selectedOptionKeys={answer?.selectedOptionKeys ?? []}
               blankValues={answer?.blankValues ?? []}
+              body={
+                <QuestionReviewBody
+                  question={question}
+                  grade={grade}
+                  blankValues={answer?.blankValues ?? []}
+                />
+              }
             />
           );
         })}

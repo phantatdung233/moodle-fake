@@ -27,7 +27,10 @@ describe("ExplanationPanel", () => {
       const markup = mount(mode);
 
       expect(markup).toContain("Giải thích bằng AI");
-      expect(markup).toContain('data-status="idle"');
+      // Practice keeps the panel's card; summary is one plain trigger under the
+      // answers, with no second card and no heading.
+      if (mode === "practice") expect(markup).toContain('data-status="idle"');
+      else expect(markup).not.toContain("data-testid");
       expect(markup).not.toContain("explanation-body");
     }
   });
