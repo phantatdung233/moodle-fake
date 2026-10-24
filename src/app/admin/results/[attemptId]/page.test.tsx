@@ -101,7 +101,7 @@ describe("/admin/results/[attemptId]", () => {
     expect(markup).toContain('index="0"');
     expect(markup).toContain('index="2"');
     expect(markup.match(/<client:QuestionReview /g)).toHaveLength(3);
-    expect(markup).toContain("Điểm: 33,3%");
+    expect(markup).toContain("Điểm: 3,5/10");
   });
 
   it("không hiện giải thích nào đã lưu: chi tiết lượt làm chỉ có phần chấm", async () => {

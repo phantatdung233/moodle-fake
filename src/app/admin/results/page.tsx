@@ -6,7 +6,7 @@ import { listResults, type ResultRow } from "@/lib/admin/results-repository";
 import {
   attemptStatusLabel,
   formatDate,
-  formatPercent,
+  formatScoreOutOfTen,
 } from "@/lib/admin/result-format";
 import { Button } from "@/components/ui/button";
 import {
@@ -251,7 +251,7 @@ export default async function ResultsPage({ searchParams }: Props) {
  */
 function ResultsTable({ rows }: { rows: ResultRow[] }) {
   return (
-    <div className="max-h-[calc(100vh-16rem)] overflow-auto rounded-lg border bg-card">
+    <div className="max-h-[calc(100vh-16rem)] max-w-full overflow-auto rounded-lg border bg-card">
       <table className="w-full min-w-[52rem] text-sm">
         <thead className="sticky top-0 z-10 bg-muted text-left">
           <tr>
@@ -291,7 +291,7 @@ function ResultsTable({ rows }: { rows: ResultRow[] }) {
                     chưa nộp
                   </span>
                 ) : (
-                  formatPercent(row.scorePercent)
+                  formatScoreOutOfTen(row.scorePercent)
                 )}
               </td>
               <td className="px-3 py-2 whitespace-nowrap">

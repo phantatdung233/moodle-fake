@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getAttemptDetail, type AttemptDetail } from "@/lib/admin/results-repository";
-import { attemptStatusLabel, formatDate, formatPercent } from "@/lib/admin/result-format";
+import { attemptStatusLabel, formatDate, formatScoreOutOfTen } from "@/lib/admin/result-format";
 import { gradeAnswer } from "@/lib/quiz/grading";
 import type { AttemptQuestionResult } from "@/lib/quiz/attempt.model";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AdminDatabaseError, AdminHeader } from "@/app/admin/admin-header";
 import { QuestionReview } from "@/app/q/[slug]/ket-qua/question-review";
 import { QuestionReviewBody } from "@/app/q/[slug]/ket-qua/question-review-body";
+import { QuestionReviewFilter } from "@/app/q/[slug]/ket-qua/question-review-filter";
 
 export const metadata: Metadata = {
   title: "Chi tiết lượt làm",
@@ -77,7 +78,7 @@ export default async function AttemptDetailPage({ params }: Props) {
           <CardTitle className="flex flex-wrap items-center gap-2">
             {attempt.scorePercent === null
               ? "Chưa chấm"
-              : `Điểm: ${formatPercent(attempt.scorePercent)}`}
+              : `Điểm: ${formatScoreOutOfTen(attempt.scorePercent)}`}
             <Badge
               variant={attempt.status === "expired" ? "destructive" : open ? "outline" : "secondary"}
             >
@@ -106,13 +107,13 @@ export default async function AttemptDetailPage({ params }: Props) {
 
       <section
         aria-labelledby="questions-heading"
-        className="mt-6 flex flex-col gap-3 xl:grid xl:grid-cols-2 xl:items-start xl:gap-4"
+        className="mt-6 flex min-w-0 flex-col gap-3"
       >
-        <h2 id="questions-heading" className="text-lg font-semibold xl:col-span-2">
+        <h2 id="questions-heading" className="text-lg font-semibold">
           Từng câu ({attempt.questions.length})
         </h2>
-
-        {attempt.questions.map((entry, index) => {
+        <QuestionReviewFilter counts={reviewFilterCounts(attempt.questions)}>
+          {attempt.questions.map((entry, index) => {
           const answer = {
             questionId: entry.question.id,
             selectedOptionKeys: entry.selectedOptionKeys,
@@ -122,27 +123,56 @@ export default async function AttemptDetailPage({ params }: Props) {
             questionId: entry.question.id,
             ...(entry.graded ?? gradeAnswer(entry.question, answer)),
           };
-          return (
-            <QuestionReview
-              key={entry.question.id}
-              index={index}
-              question={entry.question}
-              grade={grade}
-              selectedOptionKeys={entry.selectedOptionKeys}
-              blankValues={entry.blankValues}
-              body={
-                <QuestionReviewBody
+            const tone = grade.correct
+              ? "correct"
+              : entry.selectedOptionKeys.length > 0 ||
+                  entry.blankValues.some((value) => value.trim() !== "")
+                ? "wrong"
+                : "blank";
+            return (
+              <div key={entry.question.id} data-filter-tone={tone}>
+                <QuestionReview
+                  index={index}
                   question={entry.question}
                   grade={grade}
+                  selectedOptionKeys={entry.selectedOptionKeys}
                   blankValues={entry.blankValues}
+                  body={
+                    <QuestionReviewBody
+                      question={entry.question}
+                      grade={grade}
+                      blankValues={entry.blankValues}
+                    />
+                  }
+                  explanation={open ? undefined : entry.explanation}
                 />
-              }
-              explanation={open ? undefined : entry.explanation}
-            />
-          );
-        })}
+              </div>
+            );
+          })}
+        </QuestionReviewFilter>
       </section>
       </div>
     </main>
   );
+}
+
+function reviewFilterCounts(
+  questions: AttemptDetail["questions"],
+): { all: number; correct: number; wrong: number; blank: number } {
+  let correct = 0;
+  let wrong = 0;
+  let blank = 0;
+  for (const entry of questions) {
+    const grade = entry.graded ?? gradeAnswer(entry.question, {
+      selectedOptionKeys: entry.selectedOptionKeys,
+      blankValues: entry.blankValues,
+    });
+    if (grade.correct) correct += 1;
+    else if (
+      entry.selectedOptionKeys.length > 0 ||
+      entry.blankValues.some((value) => value.trim() !== "")
+    ) wrong += 1;
+    else blank += 1;
+  }
+  return { all: questions.length, correct, wrong, blank };
 }

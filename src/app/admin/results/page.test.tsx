@@ -99,7 +99,7 @@ describe("/admin/results", () => {
     expect(markup).toContain("B2012345");
     expect(markup).toContain("Nguyễn Văn An");
     expect(markup).toContain("Python cơ bản");
-    expect(markup).toContain("33,3%");
+    expect(markup).toContain("3,5/10");
     expect(markup).toContain("Đã nộp");
     // The attempt-detail link is how the giảng viên opens one lượt.
     expect(markup).toMatch(/href="\/admin\/results\/[a-f0-9]{24}"/);
