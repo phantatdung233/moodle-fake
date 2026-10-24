@@ -4,7 +4,12 @@
  * here, so the labels and number formats cannot drift apart again.
  */
 import { describe, expect, it } from "vitest";
-import { attemptStatusLabel, formatDate, formatPercent } from "./result-format";
+import {
+  attemptStatusLabel,
+  formatDate,
+  formatPercent,
+  formatScoreOutOfTen,
+} from "./result-format";
 
 describe("attemptStatusLabel", () => {
   it("gọi mọi trạng thái của Attempt bằng cùng một cụm từ ở mọi trang", () => {
@@ -22,6 +27,15 @@ describe("formatPercent", () => {
     expect(formatPercent(33.3333)).toBe("33,3%");
     expect(formatPercent(20)).toBe("20%");
     expect(formatPercent(0)).toBe("0%");
+  });
+
+  describe("formatScoreOutOfTen", () => {
+    it("rounds to half points on a 10-point scale", () => {
+      expect(formatScoreOutOfTen(10)).toBe("1/10");
+      expect(formatScoreOutOfTen(15)).toBe("1,5/10");
+      expect(formatScoreOutOfTen(24)).toBe("2,5/10");
+      expect(formatScoreOutOfTen(100)).toBe("10/10");
+    });
   });
 
   it("hiện gạch ngang cho lượt chưa có điểm", () => {

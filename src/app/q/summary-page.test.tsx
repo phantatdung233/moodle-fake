@@ -167,7 +167,7 @@ describe("summary page", () => {
 
     const html = render(await resolveTree(await SummaryPage({ params: Promise.resolve({ slug: "python-co-ban" }) })));
 
-    expect(html).toContain('<span class="sr-only">Điểm: </span>20%');
+    expect(html).toContain('<span class="sr-only">Điểm: </span>2/10');
     // `<dt>` and `<dd>` are separate elements; read each count next to its label.
     expect(html).toMatch(/Tổng câu<\/dt>[\s\S]*?<dd[^>]*>5<\/dd>/);
     expect(html).toMatch(/Đúng<\/dt>[\s\S]*?<dd[^>]*>1<\/dd>/);
@@ -251,7 +251,7 @@ describe("summary page", () => {
       await resolveTree(await SummaryPage({ params: Promise.resolve({ slug: "python-co-ban" }) })),
     );
 
-    expect(html).toContain('<span class="sr-only">Điểm: </span>0%');
+    expect(html).toContain('<span class="sr-only">Điểm: </span>0/10');
     expect(html).not.toContain("Làm lại");
   });
 

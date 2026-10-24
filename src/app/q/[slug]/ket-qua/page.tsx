@@ -23,7 +23,7 @@ import { summaryCounts } from "@/lib/student/exam";
 import {
   attemptStatusLabel,
   formatDate,
-  formatPercent,
+  formatScoreOutOfTen,
 } from "@/lib/admin/result-format";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StudentHeader } from "@/components/student-header";
@@ -152,7 +152,7 @@ export function SummaryBody({
             <div className="flex items-end justify-between gap-3">
               <span className="text-4xl font-semibold tabular-nums text-brand-ink">
                 <span className="sr-only">Điểm: </span>
-                {formatPercent(counts.scorePercent)}
+                {formatScoreOutOfTen(counts.scorePercent)}
               </span>
               <span className="pb-1 text-xs text-brand-ink/80">
                 {attempt.submittedAt
@@ -265,7 +265,7 @@ export function SummaryBody({
                     {attemptStatusLabel(entry.status, "short")}
                   </span>
                   <span className="font-medium">
-                    {formatPercent(entry.result?.total ?? 0)}
+                    {formatScoreOutOfTen(entry.result?.total ?? 0)}
                   </span>
                 </li>
               ))}

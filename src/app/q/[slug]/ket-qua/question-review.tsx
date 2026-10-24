@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Check, Eye, Minus, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,6 @@ export function QuestionReview({
   explanation,
 }: QuestionReviewProps) {
   const [showAnswers, setShowAnswers] = useState(explanation !== undefined);
-  const hideAnswers = useCallback(() => setShowAnswers(false), []);
   const answered =
     selectedOptionKeys.length > 0 ||
     blankValues.some((value) => value.trim() !== "");
@@ -200,7 +199,6 @@ export function QuestionReview({
               questionHash={question.hash}
               mode="summary"
               context={explanationContext}
-              onLoaded={hideAnswers}
             />
           ) : explanation === undefined ? null : (
             <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-4 text-sm">

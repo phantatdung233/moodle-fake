@@ -35,6 +35,13 @@ export function formatPercent(total: number | null): string {
   return `${Number(total.toFixed(1)).toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%`;
 }
 
+/** Formats the student's result on a 10-point scale in half-point steps. */
+export function formatScoreOutOfTen(total: number | null): string {
+  if (total === null) return "—";
+  const score = Math.round((total / 10) * 2) / 2;
+  return `${score.toLocaleString("vi-VN", { maximumFractionDigits: 1 })}/10`;
+}
+
 /** `23/10/2026 10:05` in Vietnam time; `—` for a missing date. */
 export function formatDate(date: Date | null): string {
   if (!date) return "—";
