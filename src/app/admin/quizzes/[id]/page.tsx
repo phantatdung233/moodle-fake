@@ -98,10 +98,10 @@ export default async function AdminQuizPage({ params }: Props) {
             <CardTitle>Tóm tắt đề</CardTitle>
             <CardDescription>
               {quiz.status === "draft"
-                ? "Đề nháp: còn sửa được câu hỏi và đáp án."
+                ? "Đề nháp: có thể chỉnh sửa."
                 : quiz.status === "published"
-                  ? "Đã publish: đề được đóng băng."
-                  : "Đã lưu trữ. Kết quả cũ vẫn đọc được."}
+                  ? "Đã publish: đề bị khoá."
+                  : "Đã lưu trữ: chỉ xem kết quả cũ."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -127,7 +127,7 @@ export default async function AdminQuizPage({ params }: Props) {
           <CardHeader>
             <CardTitle>Publish & khoá đề</CardTitle>
             <CardDescription>
-              Publish chỉ đưa ra những câu đang bật và đã có đáp án.
+              Chỉ publish câu đang bật và đã có đáp án.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -142,7 +142,7 @@ export default async function AdminQuizPage({ params }: Props) {
             <CardHeader>
               <CardTitle>Cài đặt đề</CardTitle>
               <CardDescription>
-                Chế độ, thời gian và số lần làm. Chỉ sửa được khi đề còn nháp.
+                Chế độ, thời gian và số lần làm.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -161,7 +161,7 @@ export default async function AdminQuizPage({ params }: Props) {
             <CardHeader>
               <CardTitle>Chọn câu đưa vào đề</CardTitle>
               <CardDescription>
-                Bật/tắt từng câu. Câu đang tắt hoặc chưa duyệt đáp án sẽ bị loại khi publish.
+                Bật/tắt câu đưa vào đề.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -178,7 +178,7 @@ export default async function AdminQuizPage({ params }: Props) {
           <CardHeader>
             <CardTitle>Câu trong đề</CardTitle>
             <CardDescription>
-              Đề đã đóng băng: danh sách chỉ để xem lại. Câu đang tắt không phát cho sinh viên.
+              Danh sách chỉ để xem. Câu đang tắt không phát cho sinh viên.
             </CardDescription>
           </CardHeader>
           <CardContent>

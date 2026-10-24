@@ -125,8 +125,7 @@ export function UploadForm() {
               }}
             />
             <p className="text-xs text-muted-foreground">
-              Tối đa 5 MB. Hệ thống chỉ đọc file, chưa lưu gì cho tới khi bạn bấm
-              “Tạo đề nháp”.
+              Tối đa 5 MB. Chưa lưu đến khi tạo đề.
             </p>
           </div>
           <div className="flex justify-end">
@@ -194,8 +193,7 @@ export function UploadForm() {
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">
-                {preview.needsReview} câu cần duyệt đáp án sẽ được lưu ở trạng thái
-                nháp.
+                {preview.needsReview} câu cần duyệt sẽ được lưu ở trạng thái nháp.
               </p>
               <Button type="submit" disabled={confirming}>
                 {confirming ? "Đang tạo đề…" : "Tạo đề nháp"}
@@ -223,15 +221,13 @@ function QuizPreviewSummary({ preview }: { preview: QuizUploadPreview }) {
       </dl>
 
       <p className="text-muted-foreground">
-        {ready} câu đã có đáp án dùng được. {preview.needsReview} câu sẽ được lưu ở
-        trạng thái <span className="font-medium text-foreground">cần duyệt</span> để
-        sửa sau — không câu nào bị bỏ.
+        {ready} câu sẵn sàng; {preview.needsReview} câu chờ duyệt.
       </p>
 
       {preview.errors.length > 0 ? (
         <details className="rounded-sm border p-3">
           <summary className="cursor-pointer font-medium">
-            Lỗi parse ({preview.errors.length} câu Moodle xuất hỏng)
+            Lỗi đọc file ({preview.errors.length})
           </summary>
           <ul className="mt-2 flex flex-col gap-1 text-muted-foreground">
             {errors.map((item, index) => (

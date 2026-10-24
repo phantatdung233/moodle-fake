@@ -54,7 +54,7 @@ export default async function AdminHomePage() {
             <p className="text-sm text-muted-foreground">Cần kết nối lại.</p>
           ) : (
             <p className="text-sm text-muted-foreground">
-              {result.quizzes.length} đề · tạo mới bằng file JSON Moodle.
+              {result.quizzes.length} đề.
             </p>
           )}
         </div>
@@ -65,7 +65,7 @@ export default async function AdminHomePage() {
           <CardHeader>
             <CardTitle>Tạo đề từ file JSON</CardTitle>
             <CardDescription>
-              Xem trước số câu rồi xác nhận. Mỗi lần upload là một đề nháp mới.
+              Xem trước rồi tạo đề nháp.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -84,7 +84,7 @@ export default async function AdminHomePage() {
             <div className="rounded-xl border border-dashed bg-card/60 px-6 py-14 text-center">
               <p className="font-medium">Chưa có đề nào</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Upload file JSON Moodle ở bên trái để tạo đề nháp đầu tiên.
+                Upload file JSON Moodle để tạo đề nháp.
               </p>
             </div>
           ) : (

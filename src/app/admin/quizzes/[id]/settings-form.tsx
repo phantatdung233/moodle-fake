@@ -103,7 +103,7 @@ export function QuizSettingsForm(props: QuizSettingsFormProps) {
               checked={mode === "practice"}
               onChange={() => setMode("practice")}
             />
-            Luyện tập — xem đáp án ngay, không giới hạn thời gian
+            Luyện tập — xem đáp án ngay
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -113,7 +113,7 @@ export function QuizSettingsForm(props: QuizSettingsFormProps) {
               checked={mode === "exam"}
               onChange={() => setMode("exam")}
             />
-            Kiểm tra — ẩn đáp án tới khi nộp, có thể đặt giờ và số lần
+            Kiểm tra — ẩn đáp án đến khi nộp
           </label>
         </div>
       </fieldset>

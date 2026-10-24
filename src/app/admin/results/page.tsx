@@ -101,9 +101,6 @@ export default async function ResultsPage({ searchParams }: Props) {
       <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Kết quả sinh viên</h1>
-          <p className="text-sm text-muted-foreground">
-            Mọi lượt làm, kể cả bài đang làm dở.
-          </p>
         </div>
         <Button asChild variant="outline">
           <a href={exportHref}>
@@ -116,7 +113,7 @@ export default async function ResultsPage({ searchParams }: Props) {
         <CardHeader>
           <CardTitle>Lọc kết quả</CardTitle>
           <CardDescription>
-            MSSV khớp chính xác hoặc chứa đoạn đã gõ.
+            Lọc theo đề hoặc MSSV.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -192,9 +189,7 @@ export default async function ResultsPage({ searchParams }: Props) {
           </h2>
           {page.truncated ? (
             <p className="text-sm text-muted-foreground">
-              Trang này hiện {page.rows.length} trong {page.totalRows} lượt.
-              Cuộn xuống cuối bảng để sang trang tiếp — file CSV vẫn có đủ mọi
-              lượt.
+              Hiện {page.rows.length}/{page.totalRows} lượt. CSV có đủ dữ liệu.
             </p>
           ) : null}
         </div>
@@ -206,7 +201,7 @@ export default async function ResultsPage({ searchParams }: Props) {
               <CardDescription>
                 {filtered
                   ? "Không lượt làm nào khớp bộ lọc. Thử xoá lọc."
-                  : "Sinh viên chưa làm bài nào. Publish một đề rồi chia sẻ link /q/<slug>."}
+                  : "Chưa có lượt làm. Publish đề để bắt đầu."}
               </CardDescription>
             </CardHeader>
           </Card>

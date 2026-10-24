@@ -95,10 +95,6 @@ export function AdminExplanation({
         ) : null}
       </p>
 
-      <p className="text-xs text-muted-foreground">
-        Đối chiếu câu hỏi với đáp án ghi nhận trong đề; đáp án đúng/sai vẫn do bạn quyết định.
-      </p>
-
       {text ? <ExplanationText text={text} context={{ correctOptionKeys: acceptedAnswers }} /> : null}
 
       {error ? (

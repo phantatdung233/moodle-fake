@@ -72,20 +72,19 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
       {quiz.status === "draft" ? (
         <>
           <p className="text-sm text-muted-foreground">
-            Khi publish, đề bị đóng băng: không sửa được câu, đáp án, chế độ, thời gian hay slug
-            nữa. Chỉ huỷ publish được khi chưa có sinh viên làm.
+            Publish sẽ khoá đề. Chỉ huỷ publish khi chưa có lượt làm.
           </p>
           {dropped > 0 ? (
             <p className="flex items-start gap-2 rounded-sm border border-warning-border bg-warning-surface p-3 text-sm text-warning-foreground">
               <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
               <span>
-                <strong>{dropped} câu sẽ bị loại</strong> — {enabledNeedsReview} câu còn cần duyệt đáp
-              án, {disabled} câu đang tắt. Đề publish sẽ còn <strong>{ready}</strong> câu.
+                <strong>{dropped} câu bị loại</strong> — {enabledNeedsReview} câu chờ duyệt,
+                {disabled} câu đang tắt. Còn <strong>{ready}</strong> câu.
               </span>
             </p>
           ) : (
             <p className="rounded-sm border bg-muted/40 p-3 text-sm">
-              Đề publish sẽ có <strong>{ready}</strong> câu, không câu nào bị loại.
+              Publish <strong>{ready}</strong> câu.
             </p>
           )}
 
@@ -102,11 +101,11 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
                   <div className="flex flex-col gap-2 text-sm">
                     <p>
                       {dropped > 0
-                        ? `${dropped} câu sẽ bị loại khỏi đề (cần duyệt đáp án hoặc đang tắt).`
+                        ? `${dropped} câu bị loại.`
                         : "Không câu nào bị loại."}{" "}
-                      Sinh viên sẽ thấy <strong>{ready} câu</strong>.
+                      Sinh viên thấy <strong>{ready} câu</strong>.
                     </p>
-                    <p>Sau khi publish, đề bị khoá và chỉ huỷ publish được khi chưa ai làm bài.</p>
+                    <p>Đề bị khoá sau khi publish; chỉ huỷ publish khi chưa có lượt làm.</p>
                   </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -121,7 +120,7 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
 
           {ready === 0 ? (
             <p className="text-sm text-destructive">
-              Chưa có câu nào sẵn sàng. Hãy duyệt đáp án hoặc bật ít nhất một câu đã có đáp án.
+              Chưa có câu sẵn sàng. Duyệt đáp án hoặc bật câu đã có đáp án.
             </p>
           ) : null}
 
@@ -138,8 +137,7 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
           <p className="flex items-start gap-2 rounded-sm border bg-muted/40 p-3 text-sm">
             <Lock className="mt-0.5 size-4 shrink-0" />
             <span>
-              Đề đã publish và bị đóng băng. Mọi thay đổi câu hỏi, đáp án, chế độ, thời gian hay slug
-              đều bị từ chối.
+              Đề đã publish và bị khoá. Không thể chỉnh sửa.
             </span>
           </p>
 
@@ -172,8 +170,7 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
 
           {quiz.attemptCount > 0 ? (
             <p className="text-sm text-muted-foreground">
-              Đã có {quiz.attemptCount} lượt làm nên không huỷ publish được. Muốn ẩn đề khỏi sinh
-              viên mới, hãy lưu trữ (archive).
+              Đã có {quiz.attemptCount} lượt làm nên không thể huỷ publish. Lưu trữ để ẩn đề.
             </p>
           ) : null}
         </>
@@ -183,8 +180,7 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
         <p className="flex items-start gap-2 rounded-sm border bg-muted/40 p-3 text-sm">
           <Lock className="mt-0.5 size-4 shrink-0" />
           <span>
-            Đề đã lưu trữ: không hiện cho sinh viên mới, không đổi lại trạng thái được. Các lượt làm
-            cũ vẫn đọc được.
+            Đề đã lưu trữ. Không hiện cho sinh viên mới; lượt cũ vẫn xem được.
           </span>
         </p>
       ) : null}
@@ -205,8 +201,7 @@ function DeleteDraftDialog({ pending, onConfirm }: { pending: boolean; onConfirm
         <AlertDialogHeader>
           <AlertDialogTitle>Xoá vĩnh viễn đề nháp này?</AlertDialogTitle>
           <AlertDialogDescription>
-            Đề, toàn bộ câu hỏi đã duyệt và giải thích AI đã sinh của đề sẽ bị xoá hẳn. Không hoàn
-            tác được. Đề đã publish thì không xoá được — hãy lưu trữ để lượt làm cũ còn đọc được.
+            Đề và dữ liệu liên quan sẽ bị xoá vĩnh viễn. Không thể hoàn tác.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -239,8 +234,7 @@ function ArchiveQuizDialog({ pending, onConfirm }: { pending: boolean; onConfirm
         <AlertDialogHeader>
           <AlertDialogTitle>Lưu trữ đề?</AlertDialogTitle>
           <AlertDialogDescription>
-            Đề sẽ không còn hiện cho sinh viên. Đây là trạng thái cuối: không publish lại hay sửa
-            được nữa. Kết quả các lượt làm cũ vẫn giữ nguyên.
+            Đề sẽ bị ẩn và không thể khôi phục. Kết quả cũ vẫn giữ nguyên.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

@@ -49,7 +49,7 @@ export default async function HomePage() {
         <div className="mt-16 flex flex-col items-center gap-3 text-center">
           <h1 className="text-2xl font-semibold">Chưa tải được danh sách đề</h1>
           <p className="text-sm text-muted-foreground">
-            Máy chủ đang không kết nối được cơ sở dữ liệu. Thử lại sau ít phút.
+            Không kết nối được máy chủ. Thử lại sau.
           </p>
         </div>
       </main>
@@ -81,17 +81,17 @@ export default async function HomePage() {
             Làm tiếp thôi.
           </h1>
           <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
-            Chọn đề và vào làm. Câu đã xong vẫn xem lại được.
+            Chọn đề và làm bài. Câu đã làm vẫn xem lại được.
           </p>
         </section>
       ) : (
         <>
           <section className="mt-8 flex flex-col gap-1.5 sm:mt-10">
             <h1 className="text-3xl font-semibold text-balance sm:text-4xl">
-              Học Python bằng cách làm đề.
+              Học Python bằng cách làm bài.
             </h1>
             <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
-              Chấm từng câu kèm lời giải AI — để bạn biết vì sao mình sai.
+              Chấm từng câu, kèm giải thích AI.
             </p>
           </section>
           <HomeIdentityCard />
@@ -120,7 +120,7 @@ export default async function HomePage() {
             <Layers className="mx-auto size-8 text-muted-foreground" aria-hidden />
             <p className="mt-3 font-medium">Chưa có đề nào</p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-              Giảng viên chưa mở đề. Quay lại sau nhé.
+              Giảng viên chưa mở đề.
             </p>
           </div>
         ) : listed.length === 0 ? null : (

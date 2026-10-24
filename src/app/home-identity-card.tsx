@@ -58,7 +58,7 @@ export function HomeIdentityCard() {
         <div className="min-w-0">
           <h2 className="font-semibold text-brand-ink">Nhập thông tin để bắt đầu</h2>
           <p className="mt-0.5 text-xs text-brand-ink/80">
-            Dùng cho mọi đề — vào đề nào cũng không hỏi lại.
+            Dùng cho mọi đề.
           </p>
         </div>
       </div>
@@ -119,7 +119,7 @@ export function HomeIdentityCard() {
           </p>
         ) : (
           <p className="text-xs text-brand-ink/80">
-            Bài làm và điểm được lưu theo MSSV.
+            Điểm được lưu theo MSSV.
           </p>
         )}
       </div>

@@ -413,7 +413,7 @@ export function QuizRunner({
             Danh sách câu ({done}/{questions.length} đã làm)
           </DialogTitle>
           <DialogDescription>
-            Bấm số câu để chuyển tới. Câu đã xem đáp án thì khoá.
+            Chọn câu để chuyển. Câu đã khoá không thể sửa.
           </DialogDescription>
         </DialogHeader>
         {panel}
@@ -441,7 +441,7 @@ export function QuizRunner({
               </span>
               <span className="hidden text-xs text-muted-foreground md:inline">
                 {questions.length - done === 0
-                  ? "Đã trả lời mọi câu"
+                  ? "Đã làm hết"
                   : `Còn ${questions.length - done} câu`}
               </span>
               <span className="text-muted-foreground" aria-live="polite">

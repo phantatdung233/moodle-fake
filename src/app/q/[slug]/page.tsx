@@ -176,7 +176,7 @@ export default async function QuizPage({ params }: Props) {
           <CardContent>
             <Button asChild variant="outline">
               <Link href={`/q/${quiz.slug}/ket-qua`}>
-                Xem lại kết quả các lần đã làm
+                Xem kết quả
               </Link>
             </Button>
           </CardContent>
@@ -206,7 +206,7 @@ export default async function QuizPage({ params }: Props) {
           <CardHeader>
             <CardTitle>Đề đã đóng</CardTitle>
             <CardDescription>
-              Giảng viên đã lưu trữ đề này nên không mở lượt làm mới.
+              Đề đã lưu trữ, không thể làm mới.
             </CardDescription>
           </CardHeader>
         </Card>

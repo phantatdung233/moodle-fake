@@ -181,14 +181,11 @@ export function ReviewQuestion({
             </CardTitle>
             <CardDescription>
               {mode === "recheck"
-                ? "Đề còn nháp nên vẫn sửa được đáp án đã duyệt."
-                : "Chọn đáp án đúng của câu này rồi lưu để chuyển sang câu kế tiếp."}
+                ? "Đề nháp: có thể sửa đáp án."
+                : "Chọn đáp án đúng rồi lưu để sang câu tiếp."}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5 xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:items-start xl:gap-8">
-            {/* Wide screens: Question on the left, answer form on the right
-                (sticky), so the giảng viên reads and types without scrolling
-                back and forth. Narrow screens keep the single column. */}
             <div className="flex min-w-0 flex-col gap-5">
               <ReviewedQuestionContent
                 blocks={questionBodies[question.id] ?? []}
