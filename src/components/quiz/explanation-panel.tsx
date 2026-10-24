@@ -17,6 +17,8 @@ export type ExplanationPanelProps = {
   mode?: "practice" | "summary" | "none";
   context?: ExplanationContext;
   onLoaded?: () => void;
+  initialText?: string;
+  onTextChange?: (text: string) => void;
   className?: string;
 };
 
@@ -32,12 +34,16 @@ export function ExplanationPanel({
   mode = "practice",
   context,
   onLoaded,
+  initialText = "",
+  onTextChange,
   className,
 }: ExplanationPanelProps) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText);
   const announced = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<Status>("idle");
+  const [status, setStatus] = useState<Status>(
+    initialText === "" ? "idle" : "done",
+  );
   const requestId = useRef(0);
   const abort = useRef<AbortController | null>(null);
 
@@ -83,6 +89,7 @@ export function ExplanationPanel({
         setError(EXPLANATION.unavailable);
         setStatus("error");
       } else {
+        onTextChange?.(received);
         setStatus("done");
       }
     } catch {
@@ -90,12 +97,12 @@ export function ExplanationPanel({
       setError(NETWORK_ERROR);
       setStatus("error");
     }
-  }, [attemptId, questionId, questionHash, onLoaded]);
+  }, [attemptId, questionId, questionHash, onLoaded, onTextChange]);
 
   if (mode === "none") return null;
   const streaming = status === "streaming";
 
-  if (mode === "summary" && status === "idle") {
+  if (status === "idle") {
     return (
       <Button
         type="button"
@@ -125,7 +132,7 @@ export function ExplanationPanel({
           className="size-4 shrink-0 text-muted-foreground"
           aria-hidden
         />
-        <span className="text-sm font-medium">Giải thích bằng AI</span>
+        <span className="text-sm font-medium">Giải thích</span>
         {streaming ? (
           <Loader2
             className="size-3 animate-spin text-muted-foreground"
@@ -133,20 +140,6 @@ export function ExplanationPanel({
           />
         ) : null}
       </div>
-
-      {status === "idle" ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            className="shrink-0 bg-background"
-          >
-            <Sparkles aria-hidden /> Giải thích bằng AI
-          </Button>
-        </div>
-      ) : null}
 
       {text ? <ExplanationText text={text} context={context} /> : null}
 

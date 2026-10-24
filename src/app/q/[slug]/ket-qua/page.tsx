@@ -132,14 +132,11 @@ export function SummaryBody({
   return (
     <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[19rem_minmax(0,1fr)] lg:items-start lg:gap-8">
       <div className="flex flex-col gap-6 lg:sticky lg:top-4 lg:col-start-1 lg:row-span-2 lg:row-start-1">
-        <Card className="overflow-hidden rounded-2xl border-b-4 border-b-brand bg-card py-0">
-          <div className="flex flex-col gap-1 border-b bg-brand-surface px-5 py-4">
-            <span className="text-xs font-medium text-brand-ink">
-            </span>
-            <span className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-4xl font-semibold tabular-nums text-brand-ink">
-                <span className="sr-only">Điểm: </span>
-                {formatPercent(counts.scorePercent)}
+        <Card className="rounded-2xl border-b-4 border-b-brand bg-card">
+          <CardHeader className="gap-3 border-b bg-brand-surface px-5 py-5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-brand-ink">
+                Kết quả
               </span>
               {attempt.status === "expired" ? (
                 <Badge variant="destructive">
@@ -150,37 +147,46 @@ export function SummaryBody({
                   {attemptStatusLabel(attempt.status)}
                 </Badge>
               )}
-            </span>
-            {attempt.submittedAt || summary.history.length > 1 ? (
-              <span className="text-xs text-brand-ink/80">
+            </div>
+            <div className="flex items-end justify-between gap-3">
+              <span className="text-4xl font-semibold tabular-nums text-brand-ink">
+                <span className="sr-only">Điểm: </span>
+                {formatPercent(counts.scorePercent)}
+              </span>
+              <span className="pb-1 text-xs text-brand-ink/80">
                 {attempt.submittedAt
-                  ? `Nộp lúc ${formatDate(attempt.submittedAt)}`
-                  : ""}
-                {summary.history.length > 1
-                  ? ` · lần ${summary.history.length - summary.history.findIndex((entry) => entry.id === attempt.id)}/${summary.history.length}`
-                  : ""}
+                  ? `Nộp ${formatDate(attempt.submittedAt)}`
+                  : "Chưa nộp"}
+              </span>
+            </div>
+            {summary.history.length > 1 ? (
+              <span className="text-xs text-brand-ink/80">
+                Lần{" "}
+                {summary.history.length -
+                  summary.history.findIndex((entry) => entry.id === attempt.id)}
+                /{summary.history.length}
               </span>
             ) : null}
-          </div>
-          <CardContent className="pt-4">
-            <dl className="grid grid-cols-2 gap-2 text-sm">
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5 p-5">
+            <dl className="grid grid-cols-2 gap-3 text-sm">
               <Stat label="Tổng câu" value={counts.total} />
               <Stat label="Đúng" value={counts.correct} tone="correct" />
               <Stat label="Sai" value={counts.incorrect} tone="wrong" />
               <Stat label="Bỏ trống" value={counts.blank} />
             </dl>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="border-t pt-5">
               {retryBlocked ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm leading-6 text-muted-foreground">
                   {exhaustedAttemptsError(summary.maxAttempts ?? 0)}
                 </p>
               ) : summary.canStartNew ? (
-                <Button asChild>
+                <Button asChild className="w-full">
                   <Link href={`/q/${quiz.slug}/lam-moi`}>Làm lại</Link>
                 </Button>
               ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm leading-6 text-muted-foreground">
                   Đề đã đóng nên không mở lượt mới.
                 </p>
               )}

@@ -27,15 +27,30 @@ describe("ExplanationPanel", () => {
       const markup = mount(mode);
 
       expect(markup).toContain("Giải thích bằng AI");
-      // Practice keeps the panel's card; summary is one plain trigger under the
-      // answers, with no second card and no heading.
-      if (mode === "practice") expect(markup).toContain('data-status="idle"');
-      else expect(markup).not.toContain("data-testid");
+      expect(markup.match(/Giải thích bằng AI/g)).toHaveLength(1);
+      expect(markup).not.toContain("data-testid");
       expect(markup).not.toContain("explanation-body");
     }
   });
 
   it("chế độ thi chưa nộp: không có panel nào", () => {
     expect(mount("none")).toBe("");
+  });
+
+  it("hiển thị lại giải thích đã có mà không yêu cầu sinh lại", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const markup = renderToStaticMarkup(
+      <ExplanationPanel
+        attemptId="a1"
+        questionId="Q001"
+        questionHash="hash"
+        initialText="Đây là phần giải thích đã sinh."
+      />,
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(markup).toContain("Đây là phần giải thích đã sinh.");
+    expect(markup).not.toContain("Giải thích bằng AI");
+    expect(markup).toContain('data-status="done"');
   });
 });

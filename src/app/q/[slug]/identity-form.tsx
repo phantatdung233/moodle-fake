@@ -54,7 +54,7 @@ export function IdentityForm({ slug }: { slug: string }) {
             name="studentId"
             value={studentId}
             onChange={(event) => setStudentId(event.target.value)}
-            placeholder="B2012345"
+            placeholder="26131105"
             autoComplete="username"
             autoCapitalize="characters"
             required
@@ -68,7 +68,7 @@ export function IdentityForm({ slug }: { slug: string }) {
             name="studentName"
             value={studentName}
             onChange={(event) => setStudentName(event.target.value)}
-            placeholder="Nguyễn Văn An"
+            placeholder="Kim Ngân Cute"
             autoComplete="name"
             required
             maxLength={100}

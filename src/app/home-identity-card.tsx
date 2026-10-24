@@ -79,7 +79,7 @@ export function HomeIdentityCard() {
                 nameRef.current?.focus();
               }
             }}
-            placeholder="B2012345"
+            placeholder="26131105"
             autoComplete="username"
             autoCapitalize="characters"
             enterKeyHint="next"
@@ -98,7 +98,7 @@ export function HomeIdentityCard() {
             ref={nameRef}
             value={studentName}
             onChange={(event) => setStudentName(event.target.value)}
-            placeholder="Nguyễn Văn An"
+            placeholder="Kim Ngân Cute"
             autoComplete="name"
             enterKeyHint="done"
             required

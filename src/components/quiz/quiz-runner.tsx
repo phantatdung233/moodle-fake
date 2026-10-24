@@ -38,7 +38,6 @@ import {
 import { cn } from "@/lib/utils";
 import type { AttemptView } from "@/lib/quiz/attempt-repository";
 import type { QuizQuestion } from "@/lib/quiz/quiz.model";
-import { describeFeedback, type FeedbackSummary } from "@/lib/student/feedback";
 import {
   blankIndexByName,
   blankNumber,
@@ -92,25 +91,6 @@ function explanationContextOf(
 /** How long a text input waits before saving, so typing does not hit the DB per key. */
 const SAVE_DEBOUNCE_MS = 600;
 
-function feedbackFromAttempt(
-  questionId: string,
-  attempt: AttemptView,
-): FeedbackSummary | null {
-  const graded = gradesOf(attempt, questionId);
-  if (!graded) return null;
-  const question = attempt.questionsSnapshot.find(
-    (candidate) => candidate.id === questionId,
-  );
-  return describeFeedback({
-    correct: graded.correct,
-    score: graded.score,
-    perBlank: graded.perBlank,
-    correctOptionKeys: question?.options
-      .filter((option) => option.correct)
-      .map((option) => option.key),
-  });
-}
-
 export type QuizRunnerProps = {
   /** Plain data (no Mongoose) so it survives the server → client boundary. */
   attempt: AttemptView;
@@ -142,9 +122,6 @@ export function QuizRunner({
   const [draft, setDraft] = useState<Draft>(() =>
     draftFromAttempt(questions[0]?.id ?? "", initialAttempt),
   );
-  const [feedback, setFeedback] = useState<FeedbackSummary | null>(() =>
-    feedbackFromAttempt(questions[0]?.id ?? "", initialAttempt),
-  );
   const [saving, setSaving] = useState(false);
   const [revealing, setRevealing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,6 +131,7 @@ export function QuizRunner({
   );
   const [timeUp, setTimeUp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [explanationCache, setExplanationCache] = useState<Record<string, string>>({});
 
   const question = questions[current];
   const exam = initialAttempt.mode === "exam";
@@ -276,7 +254,6 @@ export function QuizRunner({
     const nextQuestion = questions[index];
     setCurrent(index);
     setDraft(draftFromAttempt(nextQuestion.id, attempt));
-    setFeedback(feedbackFromAttempt(nextQuestion.id, attempt));
     setPanelOpen(false);
     window.scrollTo({ top: 0 });
   }
@@ -297,7 +274,6 @@ export function QuizRunner({
         return;
       }
       setAttempt((previous) => markRevealed(previous, question.id, draft));
-      setFeedback(describeFeedback(result.feedback));
     } catch {
       setError("Không chấm được câu này. Kiểm tra kết nối rồi thử lại.");
     } finally {
@@ -630,14 +606,8 @@ export function QuizRunner({
             </p>
           ) : null}
 
-          {feedback ? (
-            <FeedbackPanel feedback={feedback} options={question.options} />
-          ) : null}
-
           {/* Practice only: the Question is revealed, so the panel offers an
-              explanation under the feedback — it waits for a click, so seeing the
-              answer is instant. Exam mode never reveals here — its panel lives on
-              the summary page after submission. */}
+              explanation after the answer is checked. */}
           {revealed && attempt.mode === "practice" ? (
             <ExplanationPanel
               key={question.id}
@@ -646,6 +616,13 @@ export function QuizRunner({
               questionHash={question.hash}
               mode="practice"
               context={explanationContextOf(question, draft)}
+              initialText={explanationCache[question.id] ?? ""}
+              onTextChange={(text) =>
+                setExplanationCache((previous) => ({
+                  ...previous,
+                  [question.id]: text,
+                }))
+              }
             />
           ) : null}
 
@@ -798,81 +775,6 @@ const STATUS_LABEL: Record<QuestionStatus, string> = {
   answered: "đã trả lời",
   unanswered: "chưa trả lời",
 };
-
-function FeedbackPanel({
-  feedback,
-  options,
-}: {
-  feedback: FeedbackSummary;
-  options: readonly { key: string; text: string; correct: boolean }[];
-}) {
-  const correct = feedback.tone === "correct";
-  return (
-    <section
-      aria-live="polite"
-      data-tone={feedback.tone}
-      className={cn(
-        "flex flex-col gap-2 rounded-xl border p-4",
-        correct
-          ? "border-success-border bg-success-surface"
-          : "border-destructive-border bg-destructive-surface",
-      )}
-    >
-      <p
-        className={cn(
-          "flex items-center gap-2 text-base font-semibold",
-          correct ? "text-success-foreground" : "text-destructive",
-        )}
-      >
-        {correct ? (
-          <Check aria-hidden="true" className="size-4 shrink-0" />
-        ) : (
-          <X aria-hidden="true" className="size-4 shrink-0" />
-        )}
-        {feedback.headline}
-      </p>
-
-      {feedback.accepted.length > 0 ? (
-        <p className="text-sm">
-          <span className="text-muted-foreground">Đáp án đúng: </span>
-          <span className="font-medium">
-            {feedback.accepted
-              .map((key) => {
-                const option = options.find(
-                  (candidate) => candidate.key === key,
-                );
-                return option
-                  ? `${key}. ${option.text.replace(/\s*\n+\s*/g, " ")}`
-                  : key;
-              })
-              .join(" · ")}
-          </span>
-        </p>
-      ) : null}
-
-      {feedback.wrongBlanks && feedback.wrongBlanks.length > 0 ? (
-        <ul className="flex flex-col gap-1 text-sm">
-          {feedback.wrongBlanks.map((blank) => (
-            <li
-              key={blank.name}
-              className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-destructive"
-            >
-              <X aria-hidden="true" className="size-3 shrink-0" />
-              <span className="text-muted-foreground">Bạn gõ</span>
-              <span className="font-mono font-medium">
-                “{blank.typed === "" ? "(để trống)" : blank.typed}”
-              </span>
-              <span className="text-muted-foreground">/ đáp án đúng</span>
-              <span className="font-mono font-medium text-success-foreground">
-                “{blank.expected}”
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
-  );
-}
 
 /**
  * Option text can itself contain inline markdown/backticks, but never a code

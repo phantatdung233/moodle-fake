@@ -56,10 +56,29 @@ export default async function HomePage() {
     );
   }
 
-  const [student, summaries] = await Promise.all([
-    loadStudent(),
-    loadHomeSummaries(quizzes.map((quiz) => quiz.id)),
-  ]);
+  const student = await loadStudent();
+  if (!student) {
+    return (
+      <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 pb-16 pt-4 sm:px-6">
+        <StudentHeader actions={<ThemeToggle />} />
+        <div className="flex flex-1 items-center justify-center py-12">
+          <div className="w-full max-w-xl">
+            <section className="mb-6 text-center">
+              <h1 className="text-3xl font-semibold text-balance sm:text-4xl">
+                Học Python bằng cách làm bài.
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground sm:text-base">
+                Nhập thông tin để tiếp tục.
+              </p>
+            </section>
+            <HomeIdentityCard />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const summaries = await loadHomeSummaries(quizzes.map((quiz) => quiz.id));
 
   const progress = quizzes.map((quiz) => ({
     quiz,
@@ -75,30 +94,16 @@ export default async function HomePage() {
     <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-4 sm:px-6">
       <StudentHeader student={student} actions={<ThemeToggle />} />
 
-      {student ? (
-        <section className="mt-8 flex flex-col gap-1.5 sm:mt-10">
-          <h1 className="text-3xl font-semibold text-balance sm:text-4xl">
-            Làm tiếp thôi.
-          </h1>
-          <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
-            Chọn đề và làm bài. Câu đã làm vẫn xem lại được.
-          </p>
-        </section>
-      ) : (
-        <>
-          <section className="mt-8 flex flex-col gap-1.5 sm:mt-10">
-            <h1 className="text-3xl font-semibold text-balance sm:text-4xl">
-              Học Python bằng cách làm bài.
-            </h1>
-            <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
-              Chấm từng câu, kèm giải thích AI.
-            </p>
-          </section>
-          <HomeIdentityCard />
-        </>
-      )}
+      <section className="mt-8 flex flex-col gap-1.5 sm:mt-10">
+        <h1 className="text-3xl font-semibold text-balance sm:text-4xl">
+          Làm tiếp thôi.
+        </h1>
+        <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
+          Chọn đề và làm bài. Câu đã làm vẫn xem lại được.
+        </p>
+      </section>
 
-      {student ? <StudentStats progress={summaries} /> : null}
+      <StudentStats progress={summaries} />
       {resume?.summary?.inProgress ? (
         <ResumeCard quiz={resume.quiz} attempt={resume.summary.inProgress} />
       ) : null}
