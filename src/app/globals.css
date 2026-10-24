@@ -36,7 +36,8 @@
  * Used by `CodeBlock`, so the runner and both review pages share it.
  */
 @utility code-sheet {
-  overflow: hidden auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: inset 0 1px 0 0 oklch(0 0 0 / 0.04);

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 
@@ -23,6 +23,13 @@ export const metadata: Metadata = {
     template: "%s · Luyện tập Python",
   },
   description: "Làm bài trắc nghiệm Python và xem giải thích cho từng câu.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 /**
