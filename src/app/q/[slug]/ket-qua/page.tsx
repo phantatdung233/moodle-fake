@@ -39,21 +39,11 @@ export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ slug: string }> };
 
-/**
- * `/q/<slug>/ket-qua` — the sinh viên's own summary after submitting.
- *
- * Identity comes from the signed httpOnly cookie, never the URL: only this
- * browser's Attempts for this Quiz are read, so editing the address cannot
- * reveal another sinh viên's paper (Spec, user story 58).
- */
 export default async function SummaryPage({ params }: Props) {
   const { slug } = await params;
 
   let quiz: QuizDetail | null;
   try {
-    // A published Quiz is listed for students; a draft or archived one still
-    // resolves so an old Attempt stays readable (Spec, user story 31). The
-    // page only ever shows this browser's own Attempts.
     const anyStatus = await getQuizBySlugAnyStatus(slug);
     quiz = anyStatus ? await getQuizForAdmin(anyStatus.id) : null;
   } catch {
@@ -67,8 +57,6 @@ export default async function SummaryPage({ params }: Props) {
     );
   }
 
-  // `getQuizForAdmin` returns null for a malformed id, so a bad slug would
-  // notFound() anyway; listing keeps that one call out of the render path.
   if (!quiz) notFound();
 
   const [student, summary] = await Promise.all([
@@ -143,14 +131,10 @@ export function SummaryBody({
 
   return (
     <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[19rem_minmax(0,1fr)] lg:items-start lg:gap-8">
-      {/* Phones: the score first, then the questions. From `lg` up the score
-          card becomes a sticky column of its own, so the reviews take the rest
-          of a wide screen instead of a narrow centred column. */}
       <div className="flex flex-col gap-6 lg:sticky lg:top-4 lg:col-start-1 lg:row-span-2 lg:row-start-1">
         <Card className="overflow-hidden rounded-2xl border-b-4 border-b-brand bg-card py-0">
           <div className="flex flex-col gap-1 border-b bg-brand-surface px-5 py-4">
             <span className="text-xs font-medium text-brand-ink">
-              Điểm bài làm
             </span>
             <span className="flex flex-wrap items-baseline gap-x-2">
               <span className="text-4xl font-semibold tabular-nums text-brand-ink">
@@ -167,14 +151,16 @@ export function SummaryBody({
                 </Badge>
               )}
             </span>
-            <span className="text-xs text-brand-ink/80">
-              {attempt.submittedAt
-                ? `Nộp lúc ${formatDate(attempt.submittedAt)}`
-                : "Bài đã được chấm."}
-              {summary.history.length > 1
-                ? ` · lần ${summary.history.length - summary.history.findIndex((entry) => entry.id === attempt.id)}/${summary.history.length}`
-                : ""}
-            </span>
+            {attempt.submittedAt || summary.history.length > 1 ? (
+              <span className="text-xs text-brand-ink/80">
+                {attempt.submittedAt
+                  ? `Nộp lúc ${formatDate(attempt.submittedAt)}`
+                  : ""}
+                {summary.history.length > 1
+                  ? ` · lần ${summary.history.length - summary.history.findIndex((entry) => entry.id === attempt.id)}/${summary.history.length}`
+                  : ""}
+              </span>
+            ) : null}
           </div>
           <CardContent className="pt-4">
             <dl className="grid grid-cols-2 gap-2 text-sm">
@@ -289,7 +275,6 @@ function Stat({
       )}
     >
       <dt className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-        {/* The icon repeats the label's meaning, so colour is never the only cue. */}
         {tone === "correct" ? (
           <Check aria-hidden="true" className="size-3 text-success" />
         ) : tone === "wrong" ? (

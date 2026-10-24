@@ -22,18 +22,6 @@ export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ attemptId: string }> };
 
-/**
- * `/admin/results/[attemptId]` — one Attempt as the giảng viên explains it back
- * to the sinh viên: every Question of the paper, what the sinh viên answered,
- * the correct answer, the score and the cached AI explanation.
- *
- * Everything comes from the Attempt's own `questionsSnapshot` (and its hash-keyed
- * explanation cache), so a newer Quiz upload never rewrites an old review
- * (user stories 71–72). An Attempt still in progress has no stored result yet,
- * so its Questions show the saved answers without a verdict.
- *
- * The per-Question card is the same one the sinh viên sees on their summary.
- */
 export default async function AttemptDetailPage({ params }: Props) {
   const { attemptId } = await params;
 
@@ -130,8 +118,6 @@ export default async function AttemptDetailPage({ params }: Props) {
             selectedOptionKeys: entry.selectedOptionKeys,
             blankValues: entry.blankValues,
           };
-          // The stored grade is the authority after submission; an open Attempt
-          // is re-graded live so it still shows per-blank detail.
           const grade: AttemptQuestionResult = {
             questionId: entry.question.id,
             ...(entry.graded ?? gradeAnswer(entry.question, answer)),
@@ -160,4 +146,3 @@ export default async function AttemptDetailPage({ params }: Props) {
     </main>
   );
 }
-

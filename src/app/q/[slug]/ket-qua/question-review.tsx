@@ -12,35 +12,14 @@ import { ExplanationPanel } from "@/components/quiz/explanation-panel";
 import { ExplanationText } from "@/components/quiz/explanation-text";
 import type { ExplanationContext } from "@/lib/gemini/explanation-format";
 
-/**
- * One Question on the summary page: the Question itself, the score, and — on
- * request — which option is right and which one the sinh viên picked.
- *
- * Two rules keep a 45-Question review readable: the answers stay folded behind
- * "Xem đáp án", and the AI explanation takes their place once asked for, so a
- * Question never stacks a second block underneath.
- *
- * A client component because revealing is local state. The Question body
- * (shiki-highlighted code) is rendered on the server and passed in as `body`.
- */
 export type QuestionReviewProps = {
-  /**
-   * The Attempt these answers belong to; the AI panel names it so the server
-   * can check the cookie's MSSV owns it. Omitted on the admin's read-only view,
-   * which shows stored explanations instead of calling the model.
-   */
   attemptId?: string;
   index: number;
   question: Pick<QuizQuestion, "id" | "type" | "options" | "blanks" | "hash">;
   grade: AttemptQuestionResult;
   selectedOptionKeys: string[];
   blankValues: string[];
-  /** Server-rendered Question text, code and images. */
   body: React.ReactNode;
-  /**
-   * A stored explanation shown instead of the AI panel. Only the admin's
-   * attempt detail passes one; `null` means "ask the model".
-   */
   explanation?: string | null;
 };
 
@@ -54,10 +33,7 @@ export function QuestionReview({
   body,
   explanation,
 }: QuestionReviewProps) {
-  // The admin sees a stored explanation under the answers, so it starts open.
   const [showAnswers, setShowAnswers] = useState(explanation !== undefined);
-  // Stable identity: the panel restarts its stream if `onLoaded` changes while
-  // text is arriving.
   const hideAnswers = useCallback(() => setShowAnswers(false), []);
   const answered =
     selectedOptionKeys.length > 0 ||
@@ -114,8 +90,6 @@ export function QuestionReview({
 
       {body}
 
-      {/* A multianswer says how many blanks were right, even while folded: the
-          blank boxes in the Question itself are already coloured. */}
       {grade.perBlank && grade.perBlank.length > 0 && !showAnswers ? (
         <p className="text-sm text-muted-foreground">
           {grade.perBlank.filter((blank) => blank.correct).length}/
@@ -129,8 +103,6 @@ export function QuestionReview({
             <ul className="flex flex-col gap-1 text-sm">
               {question.options.map((option) => {
                 const picked = selectedOptionKeys.includes(option.key);
-                // Icon + colour only: a tick marks the right answer, a cross
-                // marks the wrong one the student picked. No words needed.
                 const marker = option.correct
                   ? "correct"
                   : picked
@@ -221,9 +193,6 @@ export function QuestionReview({
             </ul>
           ) : null}
 
-          {/* The explanation replaces the answers rather than stacking a second
-              card under them. The admin's attempt detail passes a stored
-              explanation, so reading an old paper never calls the model. */}
           {explanation === undefined && attemptId !== undefined ? (
             <ExplanationPanel
               attemptId={attemptId}
@@ -236,7 +205,7 @@ export function QuestionReview({
           ) : explanation === undefined ? null : (
             <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-4 text-sm">
               <p className="font-medium">
-                Giải thích{explanation ? " đã lưu" : ""}
+                Giải thích
               </p>
               {explanation ? (
                 <ExplanationText
@@ -245,7 +214,7 @@ export function QuestionReview({
                 />
               ) : (
                 <p className="text-muted-foreground">
-                  Chưa có giải thích cho câu này.
+                  Chưa có giải thích.
                 </p>
               )}
             </div>

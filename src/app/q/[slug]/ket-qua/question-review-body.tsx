@@ -9,15 +9,6 @@ import {
 } from "@/components/quiz/question-content";
 import { prepareQuestionContent } from "@/components/quiz/question-blocks";
 
-/**
- * The Question's own text for the summary page: markdown, the program with its
- * syntax highlighting (shiki runs on the server), the blank boxes already
- * coloured by whether they were right, and attached images.
- *
- * Kept apart from `question-review.tsx` so that component can be a client
- * component — highlighting cannot happen in the browser bundle — while this
- * one stays a server component and is handed in as `body`.
- */
 export async function QuestionReviewBody({
   question,
   grade,

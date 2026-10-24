@@ -1,14 +1,5 @@
 "use client";
 
-/**
- * "Giải thích bằng AI" — panel stream giải thích AI cho MỘT Question.
- *
- * Dùng chung cho chế độ luyện tập và trang tổng kết. Đáp án hiện ngay sau khi
- * chấm; lời giải thích chỉ được sinh khi sinh viên tự bấm — xem đáp án không
- * tốn một lời gọi model. Đúng/sai không bao giờ đến từ panel: nó chỉ là lời
- * giải thích đi kèm kết quả chấm cục bộ, và mọi lỗi model đều là thông báo mềm
- * kèm nút thử lại — không có màn hình vỡ.
- */
 import { useCallback, useRef, useState } from "react";
 import { Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,27 +11,11 @@ import { ExplanationText } from "@/components/quiz/explanation-text";
 import { cn } from "@/lib/utils";
 
 export type ExplanationPanelProps = {
-  /** The Attempt on screen; the server checks it belongs to this MSSV. */
   attemptId: string;
   questionId: string;
-  /** The hash the page rendered; the server rejects a stale one. */
   questionHash: string;
-  /**
-   * `practice`: the Question is already revealed; `summary`: the paper is
-   * submitted. Both show the panel, and both wait for a click.
-   * `none`: nothing to explain yet (exam still open) — render nothing.
-   */
   mode?: "practice" | "summary" | "none";
-  /**
-   * What the Question records (correct keys / accepted blanks) and what the
-   * sinh viên did, so a stored explanation from before the agreed format still
-   * gets a complete verdict line.
-   */
   context?: ExplanationContext;
-  /**
-   * Called once the first text arrives. The summary page uses it to put the
-   * explanation in place of the revealed answers instead of under them.
-   */
   onLoaded?: () => void;
   className?: string;
 };
@@ -63,7 +38,6 @@ export function ExplanationPanel({
   const announced = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
-  // A retry or a jump to another Question must abandon the previous request.
   const requestId = useRef(0);
   const abort = useRef<AbortController | null>(null);
 
@@ -113,7 +87,6 @@ export function ExplanationPanel({
       }
     } catch {
       if (id !== requestId.current || controller.signal.aborted) return;
-      // A mid-stream network drop keeps whatever text already arrived.
       setError(NETWORK_ERROR);
       setStatus("error");
     }
@@ -122,9 +95,6 @@ export function ExplanationPanel({
   if (mode === "none") return null;
   const streaming = status === "streaming";
 
-  // Summary: one unobtrusive trigger under the graded answer. The panel's own
-  // dashed card and heading are dropped — the answer is already visible, and a
-  // second card per Question just made the page long.
   if (mode === "summary" && status === "idle") {
     return (
       <Button
@@ -161,11 +131,6 @@ export function ExplanationPanel({
             className="size-3 animate-spin text-muted-foreground"
             aria-hidden
           />
-        ) : null}
-        {status === "done" ? (
-          <span className="ml-auto text-xs text-muted-foreground">
-            Do AI viết, chỉ để tham khảo
-          </span>
         ) : null}
       </div>
 
