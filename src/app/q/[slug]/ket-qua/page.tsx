@@ -131,8 +131,8 @@ export function SummaryBody({
   const retryBlocked = summary.mode === "exam" && summary.attemptsExhausted;
 
   return (
-    <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[19rem_minmax(0,1fr)] lg:items-start lg:gap-8">
-      <div className="flex flex-col gap-6 lg:sticky lg:top-4 lg:col-start-1 lg:row-span-2 lg:row-start-1">
+    <div className="flex min-w-0 flex-col gap-6 xl:grid xl:grid-cols-[20rem_minmax(0,1fr)] xl:items-start xl:gap-8">
+      <div className="flex min-w-0 flex-col gap-6 xl:sticky xl:top-4 xl:col-start-1 xl:row-span-2 xl:row-start-1">
         <Card className="rounded-2xl border-b-4 border-b-brand bg-card">
           <CardHeader className="gap-3 border-b bg-brand-surface px-5 py-5">
             <div className="flex items-center justify-between gap-3">
@@ -198,12 +198,19 @@ export function SummaryBody({
 
       <section
         aria-labelledby="review-heading"
-        className="flex flex-col gap-3 lg:col-start-2 lg:row-start-1"
+        className="flex min-w-0 flex-col gap-3 xl:col-start-2 xl:row-start-1"
       >
         <h2 id="review-heading" className="text-lg font-semibold">
           Xem lại từng câu
         </h2>
-        <QuestionReviewFilter>
+        <QuestionReviewFilter
+          counts={{
+            all: counts.total,
+            correct: counts.correct,
+            wrong: counts.incorrect,
+            blank: counts.blank,
+          }}
+        >
           {attempt.result?.perQuestion.map((grade, index) => {
             const question = attempt.questionsSnapshot.find(
               (candidate) => candidate.id === grade.questionId,
@@ -247,7 +254,7 @@ export function SummaryBody({
       {summary.history.length > 1 ? (
         <section
           aria-labelledby="history-heading"
-          className="flex flex-col gap-2 lg:col-start-2 lg:row-start-2"
+          className="flex min-w-0 flex-col gap-2 xl:col-start-2 xl:row-start-2"
         >
           <h2 id="history-heading" className="text-lg font-semibold">
             Các lần làm trước

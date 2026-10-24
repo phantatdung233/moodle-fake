@@ -4,6 +4,7 @@ import { Children, isValidElement, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 type Filter = "all" | "correct" | "wrong" | "blank";
+export type ReviewFilterCounts = Record<Filter, number>;
 
 const labels: Record<Filter, string> = {
   all: "Tất cả",
@@ -14,8 +15,10 @@ const labels: Record<Filter, string> = {
 
 export function QuestionReviewFilter({
   children,
+  counts,
 }: {
   children: React.ReactNode;
+  counts: ReviewFilterCounts;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const items = useMemo(() => Children.toArray(children), [children]);
@@ -28,7 +31,11 @@ export function QuestionReviewFilter({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Lọc câu hỏi">
+      <div
+        className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible"
+        role="group"
+        aria-label="Lọc câu hỏi"
+      >
         {(Object.keys(labels) as Filter[]).map((value) => (
           <Button
             key={value}
@@ -37,8 +44,12 @@ export function QuestionReviewFilter({
             variant={filter === value ? "default" : "outline"}
             aria-pressed={filter === value}
             onClick={() => setFilter(value)}
+            className="shrink-0"
           >
             {labels[value]}
+            <span className="rounded-full bg-current/10 px-1.5 text-[0.7rem] tabular-nums">
+              {counts[value]}
+            </span>
           </Button>
         ))}
       </div>
