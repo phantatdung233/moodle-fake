@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, ListChecks, Loader2, Send, Timer } from "lucide-react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  ListChecks,
+  Loader2,
+  Send,
+  Timer,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -28,11 +38,10 @@ import {
 import { cn } from "@/lib/utils";
 import type { AttemptView } from "@/lib/quiz/attempt-repository";
 import type { QuizQuestion } from "@/lib/quiz/quiz.model";
-import { splitPlaceholders } from "@/lib/quiz/content";
-import { parseQuestionContent } from "@/lib/quiz/markdown";
 import { describeFeedback, type FeedbackSummary } from "@/lib/student/feedback";
 import {
   blankIndexByName,
+  blankNumber,
   blankTone,
   draftFromAttempt,
   gradesOf,
@@ -44,35 +53,75 @@ import {
   type QuestionStatus,
 } from "@/lib/student/answers";
 import {
-  CodeBlock,
-  Prose,
   QuestionContent,
+  Prose,
   QuestionImages,
 } from "@/components/quiz/question-content";
+import type { RenderedQuestionContent } from "@/components/quiz/question-blocks";
 import { formatCountdown, isExpired, remainingMs } from "@/lib/student/exam";
-import { saveAnswer, revealAnswer, submitMyAttempt } from "@/lib/student/actions";
+import {
+  saveAnswer,
+  revealAnswer,
+  submitMyAttempt,
+} from "@/lib/student/actions";
 import { ExplanationPanel } from "@/components/quiz/explanation-panel";
+import type { ExplanationContext } from "@/lib/gemini/explanation-format";
+
+/**
+ * What the AI panel needs to complete a verdict the model did not spell out:
+ * the recorded answer (option keys or accepted blanks) and what the sinh viên
+ * picked. Revealed Questions are locked, so the draft is the final answer.
+ */
+function explanationContextOf(
+  question: QuizQuestion,
+  draft: Draft,
+): ExplanationContext {
+  return {
+    selectedOptionKeys: draft.selectedOptionKeys,
+    blankValues: draft.blankValues,
+    blankNames: question.blanks.map((blank, index) =>
+      blankNumber(blank.name, index),
+    ),
+    correctOptionKeys: question.options
+      .filter((option) => option.correct)
+      .map((option) => option.key),
+    correctBlankAnswers: question.blanks.map((blank) => blank.acceptedAnswer),
+  };
+}
 
 /** How long a text input waits before saving, so typing does not hit the DB per key. */
 const SAVE_DEBOUNCE_MS = 600;
 
-function feedbackFromAttempt(questionId: string, attempt: AttemptView): FeedbackSummary | null {
+function feedbackFromAttempt(
+  questionId: string,
+  attempt: AttemptView,
+): FeedbackSummary | null {
   const graded = gradesOf(attempt, questionId);
   if (!graded) return null;
-  const question = attempt.questionsSnapshot.find((candidate) => candidate.id === questionId);
+  const question = attempt.questionsSnapshot.find(
+    (candidate) => candidate.id === questionId,
+  );
   return describeFeedback({
     correct: graded.correct,
     score: graded.score,
     perBlank: graded.perBlank,
-    correctOptionKeys: question?.options.filter((option) => option.correct).map((option) => option.key),
+    correctOptionKeys: question?.options
+      .filter((option) => option.correct)
+      .map((option) => option.key),
   });
 }
 
 export type QuizRunnerProps = {
   /** Plain data (no Mongoose) so it survives the server → client boundary. */
   attempt: AttemptView;
-  /** Attempts the Quiz allows in exam mode; shown in the end-of-paper notice. */
-  maxAttempts?: number;
+  /**
+   * Each snapshot Question's body, already parsed and highlighted on the server
+   * (`questionId → blocks`). A client component may not be async, so the runner
+   * renders finished blocks instead of calling shiki itself.
+   */
+  questionBodies: Record<string, RenderedQuestionContent[]>;
+  /** Where the "học" link goes: the student's own summary for this Quiz. */
+  summaryHref: string;
 };
 
 /**
@@ -81,7 +130,11 @@ export type QuizRunnerProps = {
  * owns all client state and makes sure a debounced keystroke is flushed before
  * any navigation, before a reveal, and on page unload.
  */
-export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerProps) {
+export function QuizRunner({
+  attempt: initialAttempt,
+  questionBodies,
+  summaryHref,
+}: QuizRunnerProps) {
   const router = useRouter();
   const questions = initialAttempt.questionsSnapshot;
   const [current, setCurrent] = useState(0);
@@ -106,9 +159,11 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerP
   const exam = initialAttempt.mode === "exam";
 
   /** A save still waiting on the debounce; a newer draft replaces it. */
-  const pending = useRef<{ questionId: string; draft: Draft; timer: ReturnType<typeof setTimeout> | null } | null>(
-    null,
-  );
+  const pending = useRef<{
+    questionId: string;
+    draft: Draft;
+    timer: ReturnType<typeof setTimeout> | null;
+  } | null>(null);
   // The unload listener is registered once, so read the pending save through a ref.
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
@@ -120,12 +175,18 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerP
     pending.current = null;
     setSaving(true);
     try {
-      const result = await saveAnswer({ questionId: queued.questionId, ...queued.draft });
+      const result = await saveAnswer({
+        attemptId: initialAttempt.id,
+        questionId: queued.questionId,
+        ...queued.draft,
+      });
       if (!result.ok) {
         setError(result.error);
         return false;
       }
-      setAttempt((previous) => withAnswer(previous, queued.questionId, queued.draft));
+      setAttempt((previous) =>
+        withAnswer(previous, queued.questionId, queued.draft),
+      );
       return true;
     } catch {
       setError("Không lưu được câu trả lời. Kiểm tra kết nối rồi thử lại.");
@@ -133,13 +194,14 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerP
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [initialAttempt.id]);
 
   // Exam countdown. The clock drives the display; the server re-checks the
   // deadline on every save and on submit, so a paused tab buys nothing.
   useEffect(() => {
     if (!initialAttempt.deadline) return;
-    const tick = () => setRemaining(remainingMs(initialAttempt.deadline, new Date()));
+    const tick = () =>
+      setRemaining(remainingMs(initialAttempt.deadline, new Date()));
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
@@ -159,16 +221,24 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerP
     void (async () => {
       await flush();
       try {
-        await submitMyAttempt();
+        await submitMyAttempt({ attemptId: initialAttempt.id });
       } catch {
         // The summary page will show the stored result; nothing to recover here.
       }
-      if (!cancelled) router.replace(summaryHref(initialAttempt.quizSlug));
+      if (!cancelled) router.replace(summaryHrefOf(initialAttempt.quizSlug));
     })();
     return () => {
       cancelled = true;
     };
-  }, [initialAttempt.deadline, initialAttempt.quizSlug, remaining, timeUp, flush, router]);
+  }, [
+    initialAttempt.deadline,
+    initialAttempt.id,
+    initialAttempt.quizSlug,
+    remaining,
+    timeUp,
+    flush,
+    router,
+  ]);
 
   // Never lose a debounced keystroke on reload / tab close.
   useEffect(() => {
@@ -176,16 +246,20 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerP
       const queued = pendingRef.current.current;
       if (!queued) return;
       pendingRef.current.current = null;
-      void saveAnswer({ questionId: queued.questionId, ...queued.draft });
+      void saveAnswer({ attemptId: initialAttempt.id, questionId: queued.questionId, ...queued.draft });
     }
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, []);
+  }, [initialAttempt.id]);
 
   function queueSave(nextDraft: Draft, immediate: boolean) {
     if (!question || isRevealed(attempt, question.id) || timeUp) return;
     if (pending.current?.timer) clearTimeout(pending.current.timer);
-    pending.current = { questionId: question.id, draft: nextDraft, timer: null };
+    pending.current = {
+      questionId: question.id,
+      draft: nextDraft,
+      timer: null,
+    };
     if (immediate) {
       void flush();
       return;
@@ -214,7 +288,10 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerP
 
     setRevealing(true);
     try {
-      const result = await revealAnswer({ questionId: question.id });
+      const result = await revealAnswer({
+        attemptId: initialAttempt.id,
+        questionId: question.id,
+      });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -236,12 +313,12 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerP
 
     setSubmitting(true);
     try {
-      const result = await submitMyAttempt();
+      const result = await submitMyAttempt({ attemptId: initialAttempt.id });
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      router.replace(summaryHref(initialAttempt.quizSlug));
+      router.replace(summaryHrefOf(initialAttempt.quizSlug));
     } catch {
       setError("Không nộp được bài. Kiểm tra kết nối rồi thử lại.");
     } finally {
@@ -250,11 +327,17 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerP
   }
 
   if (!question) {
-    return <p className="text-sm text-muted-foreground">Đề này chưa có câu hỏi nào để làm.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        Đề này chưa có câu hỏi nào để làm.
+      </p>
+    );
   }
 
   const revealed = isRevealed(attempt, question.id);
-  const statuses = questions.map((candidate) => questionStatus(candidate.id, attempt));
+  const statuses = questions.map((candidate) =>
+    questionStatus(candidate.id, attempt),
+  );
   const done = statuses.filter((status) => status !== "unanswered").length;
   const progress = Math.round((done / questions.length) * 100);
   const graded = gradesOf(attempt, question.id);
@@ -263,7 +346,8 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerP
 
   function renderBlank(name: string): React.ReactNode {
     const index = blankIndex.get(name);
-    if (index === undefined) return <span className="text-muted-foreground">____</span>;
+    if (index === undefined)
+      return <span className="text-muted-foreground">____</span>;
 
     const value = draft.blankValues[index] ?? "";
     const tone = blankTone(graded?.perBlank?.[index]);
@@ -276,255 +360,375 @@ export function QuizRunner({ attempt: initialAttempt, maxAttempts }: QuizRunnerP
         disabled={revealed}
         onChange={(event) => {
           const blankValues = question.blanks.map((_, position) =>
-            position === index ? event.target.value : (draft.blankValues[position] ?? ""),
+            position === index
+              ? event.target.value
+              : (draft.blankValues[position] ?? ""),
           );
           const nextDraft = { ...draft, blankValues };
           setDraft(nextDraft);
           queueSave(nextDraft, false);
         }}
         className={cn(
-          "inline-block h-8 min-w-24 rounded border border-input bg-background px-2 font-mono text-sm",
-          tone === "wrong" && "border-destructive bg-destructive/10 text-destructive",
-          tone === "correct" && "border-emerald-600 bg-emerald-50 text-emerald-900",
+          "inline-block h-7 min-w-24 rounded-md border border-input bg-background px-2 font-mono text-sm",
+          tone === "wrong" &&
+            "border-destructive-border bg-destructive-surface text-destructive",
+          tone === "correct" &&
+            "border-success-border bg-success-surface text-success-foreground",
         )}
       />
     );
   }
 
+  const last = current === questions.length - 1;
+
+  /** The mini map: always visible on a phone, the whole rail on a desktop. */
+  const panel = (
+    <QuestionPanel
+      questions={questions}
+      statuses={statuses}
+      current={current}
+      onJump={goTo}
+    />
+  );
+
+  /**
+   * Everything that used to sit in a side rail lives in two bars now: "Nộp
+   * bài" at the top, page-turning at the bottom, both fixed, so they stay put
+   * while the Question scrolls. One column of content in between.
+   */
+  const listButton = (
+    <Dialog open={panelOpen} onOpenChange={setPanelOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" aria-label="Danh sách câu">
+          <ListChecks aria-hidden />
+          <span className="hidden sm:inline">Danh sách câu</span>
+          <span className="tabular-nums sm:hidden" aria-hidden>
+            {current + 1}
+          </span>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            Danh sách câu ({done}/{questions.length} đã làm)
+          </DialogTitle>
+          <DialogDescription>
+            Bấm số câu để chuyển tới. Câu đã xem đáp án thì khoá.
+          </DialogDescription>
+        </DialogHeader>
+        {panel}
+      </DialogContent>
+    </Dialog>
+  );
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="sticky top-0 z-10 -mx-4 flex flex-col gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="flex items-center justify-between gap-3 text-sm">
-          <span className="font-medium">
-            Câu {current + 1}/{questions.length}
-          </span>
-          <span className="flex items-center gap-2 text-muted-foreground">
-            <span className="flex items-center gap-1 text-xs" aria-live="polite">
-              {saving ? (
-                <>
-                  <Loader2 className="size-3 animate-spin" /> Đang lưu…
-                </>
-              ) : (
-                <>
-                  <Check className="size-3" /> Đã lưu
-                </>
-              )}
-            </span>
-            <Dialog open={panelOpen} onOpenChange={setPanelOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <ListChecks /> Danh sách câu
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
-                <DialogHeader>
-                  <DialogTitle>
-                    Danh sách câu ({done}/{questions.length} đã làm)
-                  </DialogTitle>
-                  <DialogDescription>
-                    Bấm số câu để nhảy tới. Câu đã xem đáp án sẽ bị khoá.
-                  </DialogDescription>
-                </DialogHeader>
-                <QuestionPanel
-                  questions={questions}
-                  statuses={statuses}
-                  current={current}
-                  onJump={goTo}
-                />
-              </DialogContent>
-            </Dialog>
-          </span>
+    <>
+      {/* Fixed on every screen size: the Question scrolls underneath it, so
+          Nộp bài is always one click away. Full width, content centred. */}
+      <div className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 pb-2 pt-2.5 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <div className="flex items-center gap-3 text-sm">
+              <Link
+                href="/"
+                aria-label="Về danh sách đề"
+                className="inline-flex items-center gap-1 rounded-md text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+              </Link>
+              <span className="font-medium tabular-nums">
+                {done}/{questions.length} câu
+              </span>
+              <span className="hidden text-xs text-muted-foreground md:inline">
+                {questions.length - done === 0
+                  ? "Đã trả lời mọi câu"
+                  : `Còn ${questions.length - done} câu`}
+              </span>
+              <span className="text-muted-foreground" aria-live="polite">
+                {saving ? (
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="size-3 animate-spin" aria-hidden /> Đang
+                    lưu…
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5">
+                    <Check className="size-3" aria-hidden /> Đã lưu
+                  </span>
+                )}
+              </span>
+              {exam && remaining !== null ? (
+                <span
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold tabular-nums",
+                    remaining <= 5 * 60_000
+                      ? "border-destructive-border bg-destructive-surface text-destructive"
+                      : "border-border text-foreground",
+                  )}
+                  role="timer"
+                  aria-live={remaining <= 5 * 60_000 ? "assertive" : "off"}
+                  aria-label="Thời gian còn lại"
+                >
+                  <Timer className="size-3.5" aria-hidden />
+                  {timeUp ? "Hết giờ" : formatCountdown(remaining)}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Below `xl` the list only exists in this dialog; from `xl` up
+                  it sits beside the Question, so the button would be a rerun. */}
+              <span className="xl:hidden">{listButton}</span>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    disabled={submitting}
+                    variant={
+                      questions.length - done === 0 ? "default" : "outline"
+                    }
+                  >
+                    <Send aria-hidden />
+                    {submitting ? "Đang nộp…" : "Nộp bài"}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Nộp bài?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {questions.length - done === 0
+                        ? "Bài không sửa được nữa sau khi nộp."
+                        : `Còn ${questions.length - done} câu chưa trả lời sẽ tính 0 điểm. Bài không sửa được nữa sau khi nộp.`}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Làm tiếp</AlertDialogCancel>
+                    <AlertDialogAction onClick={onSubmitPaper}>
+                      Nộp bài
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
+          <Progress
+            value={progress}
+            aria-label={`Đã làm ${done}/${questions.length} câu`}
+            className="h-1"
+          />
         </div>
-        {exam && remaining !== null ? (
-          <p
-            className={cn(
-              "flex items-center gap-1.5 text-sm font-semibold tabular-nums",
-              remaining <= 5 * 60_000 ? "text-destructive" : "text-muted-foreground",
-            )}
-            role="timer"
-            aria-live={remaining <= 5 * 60_000 ? "assertive" : "off"}
-            aria-label="Thời gian còn lại"
-          >
-            <Timer className="size-4" />
-            {timeUp ? "Hết giờ" : formatCountdown(remaining)}
-          </p>
-        ) : null}
-        <Progress value={progress} aria-label={`Đã làm ${done}/${questions.length} câu`} />
       </div>
 
-      <main className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">Câu {question.no || current + 1}</Badge>
-          {revealed ? <Badge variant="secondary">Đã khoá</Badge> : null}
+      {/* The bars are fixed over the content: the padding keeps the last line
+          of the Question clear of the bottom bar. From `xl` up the list of
+          Questions is a real second column, in the page flow like the Question
+          itself: it scrolls away with it, then sticks once it reaches the bar. */}
+      <div className="flex flex-col gap-4 pb-28 pt-5 xl:grid xl:grid-cols-[minmax(0,1fr)_15rem] xl:items-start xl:gap-6">
+        <div className="flex flex-col gap-4">
+          <article className="flex flex-col gap-4 rounded-xl border bg-card p-4 sm:p-5">
+            <header className="flex flex-wrap items-center gap-2 border-b pb-3">
+              <Badge variant="outline" className="font-mono tabular-nums">
+                Câu {question.no || current + 1}
+                <span className="text-muted-foreground">
+                  /{questions.length}
+                </span>
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {question.type === "multianswer"
+                  ? `Điền ${question.blanks.length} chỗ trống`
+                  : "Chọn một đáp án"}
+              </span>
+              {revealed ? (
+                <Badge variant="secondary" className="ml-auto">
+                  Đã khoá
+                </Badge>
+              ) : null}
+            </header>
+
+            <QuestionContent
+              blocks={questionBodies[question.id] ?? []}
+              renderBlank={renderBlank}
+            />
+            <QuestionImages images={question.images} questionNo={question.no} />
+
+            {question.options.length > 0 ? (
+              <fieldset
+                data-layout={
+                  question.options.every((option) => option.text.length <= 60)
+                    ? "grid"
+                    : "list"
+                }
+                className="flex flex-col gap-2 data-[layout=grid]:sm:grid data-[layout=grid]:sm:grid-cols-2"
+              >
+                <legend className="sr-only">Lựa chọn</legend>
+                {question.options.map((option) => {
+                  const checked = draft.selectedOptionKeys.includes(option.key);
+                  const showCorrect = revealed && option.correct;
+                  const showWrongPick = revealed && checked && !option.correct;
+                  return (
+                    <label
+                      key={option.key}
+                      className={cn(
+                        "flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors duration-200",
+                        "border-border hover:border-foreground/25 hover:bg-muted/60",
+                        checked &&
+                          !revealed &&
+                          "border-primary bg-primary/5 hover:bg-primary/5",
+                        showCorrect &&
+                          "border-success-border bg-success-surface hover:bg-success-surface",
+                        showWrongPick &&
+                          "border-destructive-border bg-destructive-surface hover:bg-destructive-surface",
+                        revealed && "cursor-default hover:border-[inherit]",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name={`question-${question.id}`}
+                        value={option.key}
+                        checked={checked}
+                        disabled={revealed}
+                        onChange={() => {
+                          // A radio only ever holds one key; saving immediately keeps it simple.
+                          const nextDraft: Draft = {
+                            selectedOptionKeys: [option.key],
+                            blankValues: draft.blankValues,
+                          };
+                          setDraft(nextDraft);
+                          queueSave(nextDraft, true);
+                        }}
+                        className="mt-0.5 size-4 shrink-0 accent-primary disabled:accent-muted-foreground disabled:opacity-100"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="mr-1.5 font-mono text-xs text-muted-foreground">
+                          {option.key}.
+                        </span>
+                        <OptionText text={option.text} />
+                      </span>
+                      {showCorrect ? (
+                        <span className="flex shrink-0 items-center gap-1 self-center text-xs font-medium text-success-foreground">
+                          <Check className="size-3.5" aria-hidden />
+                          đáp án đúng
+                        </span>
+                      ) : null}
+                      {showWrongPick ? (
+                        <span className="flex shrink-0 items-center gap-1 self-center text-xs font-medium text-destructive">
+                          <X className="size-3.5" aria-hidden />
+                          bạn chọn
+                        </span>
+                      ) : null}
+                    </label>
+                  );
+                })}
+              </fieldset>
+            ) : null}
+          </article>
+
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-lg border border-destructive-border bg-destructive-surface p-3 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          ) : null}
+
+          {feedback ? (
+            <FeedbackPanel feedback={feedback} options={question.options} />
+          ) : null}
+
+          {/* Practice only: the Question is revealed, so the panel offers an
+              explanation under the feedback — it waits for a click, so seeing the
+              answer is instant. Exam mode never reveals here — its panel lives on
+              the summary page after submission. */}
+          {revealed && attempt.mode === "practice" ? (
+            <ExplanationPanel
+              key={question.id}
+              attemptId={initialAttempt.id}
+              questionId={question.id}
+              questionHash={question.hash}
+              mode="practice"
+              context={explanationContextOf(question, draft)}
+            />
+          ) : null}
+
+          {timeUp ? (
+            <p
+              role="alert"
+              className="rounded-lg border border-destructive-border bg-destructive-surface p-3 text-sm text-destructive"
+            >
+              Đã hết giờ. Bài đang được nộp tự động…
+            </p>
+          ) : null}
         </div>
 
-        {/* The one renderer of a Question body: it parses `content` itself and
-            calls back for each `[[n]]` at the marker's exact position. */}
-        <QuestionContent content={question.content} blankCount={question.blanks.length} renderBlank={renderBlank} />
-        <QuestionImages images={question.images} questionNo={question.no} />
+        {/* Only when the screen is truly wide: the list of Questions beside the
+          Question, so jumping between them needs no dialog. It scrolls with
+          the page and sticks under the top bar once it gets there. */}
+        <aside
+          aria-label="Danh sách câu"
+          className="scroll-quiet hidden xl:sticky xl:top-36 xl:block xl:max-h-[calc(100vh-10rem)] xl:overflow-y-auto xl:rounded-xl xl:border xl:bg-card xl:p-3"
+        >
+          {panel}
+        </aside>
+      </div>
 
-        {question.options.length > 0 ? (
-          <fieldset className="flex flex-col gap-2">
-            <legend className="sr-only">Lựa chọn</legend>
-            {question.options.map((option) => {
-              const checked = draft.selectedOptionKeys.includes(option.key);
-              return (
-                <label
-                  key={option.key}
-                  className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors",
-                    checked && !revealed && "border-primary bg-primary/5",
-                    revealed && option.correct && "border-emerald-600 bg-emerald-50",
-                    revealed && checked && !option.correct && "border-destructive bg-destructive/10",
-                    revealed && "cursor-default",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name={`question-${question.id}`}
-                    value={option.key}
-                    checked={checked}
-                    disabled={revealed}
-                    onChange={() => {
-                      // A radio only ever holds one key; saving immediately keeps it simple.
-                      const nextDraft: Draft = { selectedOptionKeys: [option.key], blankValues: draft.blankValues };
-                      setDraft(nextDraft);
-                      queueSave(nextDraft, true);
-                    }}
-                    className="mt-1"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="mr-1 font-mono text-muted-foreground">{option.key}.</span>
-                    <OptionText text={option.text} />
-                  </span>
-                </label>
-              );
-            })}
-          </fieldset>
-        ) : null}
-
-        {error ? (
-          <p
-            role="alert"
-            className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+      {/* Fixed at the bottom: previous / the one action that teaches / next,
+          so neither turning the page nor seeing why you were right needs a
+          scroll. Practice only — exam reveals nothing before submitting. */}
+      <nav
+        aria-label="Chuyển câu"
+        className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
+      >
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-2 px-4 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:gap-3 sm:px-6">
+          <Button
+            variant="outline"
+            onClick={() => goTo(current - 1)}
+            disabled={current === 0}
+            aria-label="Câu trước"
+            className="size-9 shrink-0 px-0 sm:h-8 sm:w-auto sm:px-2.5"
           >
-            {error}
-          </p>
-        ) : null}
-
-        {feedback ? (
-          <FeedbackPanel feedback={feedback} options={question.options} />
-        ) : (
-          <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
-            <p className="text-sm text-muted-foreground">
-              {attempt.mode === "practice"
-                ? "Trả lời xong, bấm “Xem đáp án” để biết đúng/sai. Câu sẽ bị khoá sau đó."
-                : "Chế độ kiểm tra: đáp án hiện sau khi nộp bài."}
-            </p>
-            {attempt.mode === "practice" ? (
-              <Button type="button" onClick={onReveal} disabled={revealing} className="self-start">
-                {revealing ? "Đang chấm…" : "Xem đáp án"}
-              </Button>
-            ) : null}
-          </div>
-        )}
-
-        {/* Practice only: the Question is revealed, so the explanation streams in
-            under the feedback. Exam mode never reveals here — its panel lives on
-            the summary page after submission. */}
-        {revealed && attempt.mode === "practice" ? (
-          <ExplanationPanel
-            key={question.id}
-            questionId={question.id}
-            questionHash={question.hash}
-            mode="practice"
-            initialText={attempt.explanationsByHash?.[question.hash] ?? null}
-          />
-        ) : null}
-      </main>
-
-      {exam ? (
-        <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-          Chế độ kiểm tra: đáp án và giải thích chỉ hiện sau khi nộp.
-          {remaining !== null ? " Bài tự động nộp khi hết giờ." : ""}
-          {maxAttempts !== undefined ? ` Bạn được làm tối đa ${maxAttempts} lần.` : ""}
-        </p>
-      ) : null}
-
-      {timeUp ? (
-        <p
-          role="alert"
-          className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
-        >
-          Đã hết giờ. Bài đang được nộp tự động…
-        </p>
-      ) : null}
-
-      <nav className="flex items-center justify-between gap-3 border-t pt-4">
-        <Button variant="outline" onClick={() => goTo(current - 1)} disabled={current === 0}>
-          <ArrowLeft /> Câu trước
-        </Button>
-        <Button
-          onClick={() => goTo(current + 1)}
-          disabled={current === questions.length - 1}
-        >
-          Câu sau <ArrowRight />
-        </Button>
-      </nav>
-
-      <SubmitPaper
-        unanswered={questions.length - done}
-        submitting={submitting || timeUp}
-        onSubmit={onSubmitPaper}
-      />
-    </div>
-  );
-}
-
-/** "Nộp bài" with a confirm dialog naming how many Questions are still blank. */
-function SubmitPaper({
-  unanswered,
-  submitting,
-  onSubmit,
-}: {
-  unanswered: number;
-  submitting: boolean;
-  onSubmit: () => void;
-}) {
-  return (
-    <section className="flex flex-col gap-2 rounded-lg border p-4">
-      <p className="text-sm text-muted-foreground">
-        {unanswered === 0
-          ? "Bạn đã trả lời mọi câu. Nộp bài để chấm điểm và xem lại."
-          : `Còn ${unanswered} câu chưa trả lời — câu bỏ trống tính 0 điểm.`}
-      </p>
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button disabled={submitting} className="self-start">
-            <Send /> {submitting ? "Đang nộp…" : "Nộp bài"}
+            <ArrowLeft aria-hidden />
+            <span className="hidden sm:inline">Câu trước</span>
           </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Nộp bài?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {unanswered === 0
-                ? "Bài sẽ được chấm ngay và không sửa được câu trả lời nữa."
-                : `Còn ${unanswered} câu chưa trả lời sẽ tính 0 điểm. Bài sẽ được chấm ngay và không sửa được nữa.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Làm tiếp</AlertDialogCancel>
-            <AlertDialogAction onClick={onSubmit}>Nộp bài</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </section>
+
+          {!exam && !revealed ? (
+            <Button
+              type="button"
+              onClick={onReveal}
+              disabled={revealing}
+              className="min-w-0 flex-1 gap-1.5 bg-brand text-brand-foreground hover:bg-brand/85 sm:max-w-xs"
+            >
+              <Check aria-hidden />
+              {revealing ? "Đang chấm…" : "Kiểm tra câu này"}
+            </Button>
+          ) : (
+            <span className="text-sm text-muted-foreground tabular-nums">
+              {current + 1}/{questions.length}
+            </span>
+          )}
+
+          {last && !exam && !revealed ? (
+            <Button asChild variant="outline" className="shrink-0">
+              <Link href={summaryHref}>Kết quả</Link>
+            </Button>
+          ) : (
+            <Button
+              onClick={() => goTo(current + 1)}
+              disabled={last}
+              aria-label="Câu sau"
+              className="shrink-0 gap-1.5"
+            >
+              <span className="hidden sm:inline">Câu sau</span>
+              <span className="sm:hidden">Tiếp</span>
+              <ArrowRight aria-hidden />
+            </Button>
+          )}
+        </div>
+      </nav>
+    </>
   );
 }
 
 /** Where "nộp bài" lands: the student's own summary for this Quiz. */
-function summaryHref(slug: string): string {
+function summaryHrefOf(slug: string): string {
   return `/q/${slug}/ket-qua`;
 }
 
@@ -541,7 +745,10 @@ function QuestionPanel({
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <ul className="grid grid-cols-6 gap-2 sm:grid-cols-10" aria-label="Danh sách câu hỏi">
+      <ul
+        className="scroll-quiet grid max-h-[22rem] auto-cols-[minmax(0,1fr)] grid-flow-row grid-cols-6 gap-1.5 overflow-y-auto overflow-x-hidden pr-2"
+        aria-label="Danh sách câu hỏi"
+      >
         {questions.map((question, index) => {
           const status = statuses[index];
           return (
@@ -552,11 +759,14 @@ function QuestionPanel({
                 aria-current={index === current ? "step" : undefined}
                 aria-label={`Câu ${index + 1}: ${STATUS_LABEL[status]}`}
                 className={cn(
-                  "flex size-9 items-center justify-center rounded-md border text-sm transition-colors",
-                  status === "revealed" && "border-emerald-600 bg-emerald-50 text-emerald-900",
-                  status === "answered" && "border-primary bg-primary/10 font-medium",
-                  status === "unanswered" && "border-input text-muted-foreground",
-                  index === current && "ring-2 ring-ring ring-offset-1",
+                  "flex aspect-square w-full items-center justify-center rounded-md border text-sm tabular-nums transition-colors duration-200 hover:border-foreground/40",
+                  status === "revealed" &&
+                    "border-success-border bg-success-surface text-success-foreground",
+                  status === "answered" &&
+                    "border-primary bg-primary/10 font-medium hover:bg-primary/15",
+                  status === "unanswered" &&
+                    "border-input text-muted-foreground",
+                  index === current && "ring-2 ring-ring",
                 )}
               >
                 {index + 1}
@@ -566,14 +776,17 @@ function QuestionPanel({
         })}
       </ul>
       <ul className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <li className="flex items-center gap-1">
-          <span className="size-3 rounded border border-primary bg-primary/10" /> Đã trả lời
+        <li className="flex items-center gap-1.5">
+          <span className="size-3 rounded-sm border border-primary bg-primary/10" />{" "}
+          Đã trả lời
         </li>
-        <li className="flex items-center gap-1">
-          <span className="size-3 rounded border border-input" /> Chưa trả lời
+        <li className="flex items-center gap-1.5">
+          <span className="size-3 rounded-sm border border-input" /> Chưa trả
+          lời
         </li>
-        <li className="flex items-center gap-1">
-          <span className="size-3 rounded border border-emerald-600 bg-emerald-50" /> Đã khoá
+        <li className="flex items-center gap-1.5">
+          <span className="size-3 rounded-sm border border-success-border bg-success-surface" />{" "}
+          Đã khoá
         </li>
       </ul>
     </div>
@@ -599,22 +812,38 @@ function FeedbackPanel({
       aria-live="polite"
       data-tone={feedback.tone}
       className={cn(
-        "flex flex-col gap-2 rounded-lg border p-4",
-        correct ? "border-emerald-600/50 bg-emerald-50" : "border-destructive/40 bg-destructive/5",
+        "flex flex-col gap-2 rounded-xl border p-4",
+        correct
+          ? "border-success-border bg-success-surface"
+          : "border-destructive-border bg-destructive-surface",
       )}
     >
-      <p className={cn("text-base font-semibold", correct ? "text-emerald-900" : "text-destructive")}>
+      <p
+        className={cn(
+          "flex items-center gap-2 text-base font-semibold",
+          correct ? "text-success-foreground" : "text-destructive",
+        )}
+      >
+        {correct ? (
+          <Check aria-hidden="true" className="size-4 shrink-0" />
+        ) : (
+          <X aria-hidden="true" className="size-4 shrink-0" />
+        )}
         {feedback.headline}
       </p>
 
       {feedback.accepted.length > 0 ? (
         <p className="text-sm">
-          Đáp án đúng:{" "}
+          <span className="text-muted-foreground">Đáp án đúng: </span>
           <span className="font-medium">
             {feedback.accepted
               .map((key) => {
-                const option = options.find((candidate) => candidate.key === key);
-                return option ? `${key}. ${option.text.replace(/\s*\n+\s*/g, " ")}` : key;
+                const option = options.find(
+                  (candidate) => candidate.key === key,
+                );
+                return option
+                  ? `${key}. ${option.text.replace(/\s*\n+\s*/g, " ")}`
+                  : key;
               })
               .join(" · ")}
           </span>
@@ -624,12 +853,19 @@ function FeedbackPanel({
       {feedback.wrongBlanks && feedback.wrongBlanks.length > 0 ? (
         <ul className="flex flex-col gap-1 text-sm">
           {feedback.wrongBlanks.map((blank) => (
-            <li key={blank.name} className="text-destructive">
-              Ô này: bạn gõ{" "}
+            <li
+              key={blank.name}
+              className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-destructive"
+            >
+              <X aria-hidden="true" className="size-3 shrink-0" />
+              <span className="text-muted-foreground">Bạn gõ</span>
               <span className="font-mono font-medium">
                 “{blank.typed === "" ? "(để trống)" : blank.typed}”
-              </span>{" "}
-              / đáp án đúng <span className="font-mono font-medium">“{blank.expected}”</span>
+              </span>
+              <span className="text-muted-foreground">/ đáp án đúng</span>
+              <span className="font-mono font-medium text-success-foreground">
+                “{blank.expected}”
+              </span>
             </li>
           ))}
         </ul>
@@ -639,21 +875,10 @@ function FeedbackPanel({
 }
 
 /**
- * Option text can itself be a code snippet (`print(arr[1, 2])`), so it gets the
- * same treatment as the Question body — without blanks.
+ * Option text can itself contain inline markdown/backticks, but never a code
+ * block (checked across the export), so it skips the shiki path entirely — no
+ * highlighting ever runs in the browser. No blanks in option text either.
  */
 function OptionText({ text }: { text: string }) {
-  const blocks = parseQuestionContent(splitPlaceholders(text, 0));
-
-  return (
-    <span className="flex flex-col gap-1">
-      {blocks.map((block, index) =>
-        block.kind === "markdown" ? (
-          <Prose key={index} text={block.text} />
-        ) : (
-          <CodeBlock key={index} lines={block.lines} renderBlank={() => null} />
-        ),
-      )}
-    </span>
-  );
+  return <Prose text={text.replace(/\s*\n+\s*/g, " ")} />;
 }

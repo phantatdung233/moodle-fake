@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, Lock, RotateCcw, Send, Trash2 } from "lucide-react";
+import { Archive, Lock, RotateCcw, Send, Trash2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -76,12 +76,15 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
             nữa. Chỉ huỷ publish được khi chưa có sinh viên làm.
           </p>
           {dropped > 0 ? (
-            <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-              <strong>{dropped} câu sẽ bị loại</strong> — {enabledNeedsReview} câu còn cần duyệt đáp
+            <p className="flex items-start gap-2 rounded-sm border border-warning-border bg-warning-surface p-3 text-sm text-warning-foreground">
+              <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+              <span>
+                <strong>{dropped} câu sẽ bị loại</strong> — {enabledNeedsReview} câu còn cần duyệt đáp
               án, {disabled} câu đang tắt. Đề publish sẽ còn <strong>{ready}</strong> câu.
+              </span>
             </p>
           ) : (
-            <p className="rounded-lg border bg-muted/30 p-3 text-sm">
+            <p className="rounded-sm border bg-muted/40 p-3 text-sm">
               Đề publish sẽ có <strong>{ready}</strong> câu, không câu nào bị loại.
             </p>
           )}
@@ -132,7 +135,7 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
 
       {quiz.status === "published" ? (
         <>
-          <p className="flex items-start gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
+          <p className="flex items-start gap-2 rounded-sm border bg-muted/40 p-3 text-sm">
             <Lock className="mt-0.5 size-4 shrink-0" />
             <span>
               Đề đã publish và bị đóng băng. Mọi thay đổi câu hỏi, đáp án, chế độ, thời gian hay slug
@@ -177,7 +180,7 @@ export function QuizLifecycleCard({ quiz }: QuizLifecycleCardProps) {
       ) : null}
 
       {quiz.status === "archived" ? (
-        <p className="flex items-start gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
+        <p className="flex items-start gap-2 rounded-sm border bg-muted/40 p-3 text-sm">
           <Lock className="mt-0.5 size-4 shrink-0" />
           <span>
             Đề đã lưu trữ: không hiện cho sinh viên mới, không đổi lại trạng thái được. Các lượt làm
@@ -209,7 +212,7 @@ function DeleteDraftDialog({ pending, onConfirm }: { pending: boolean; onConfirm
         <AlertDialogFooter>
           <AlertDialogCancel>Thôi</AlertDialogCancel>
           <AlertDialogAction
-            className="bg-destructive text-white hover:bg-destructive/90"
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={() => {
               setOpen(false);
               onConfirm();

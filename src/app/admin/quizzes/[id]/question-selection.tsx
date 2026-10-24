@@ -119,7 +119,7 @@ export function QuestionSelectionList({ quizId, questions, readOnly }: QuestionS
         </p>
       ) : null}
 
-      <ul className="flex max-h-[32rem] flex-col divide-y overflow-y-auto rounded-lg border">
+      <ul className="flex max-h-[70vh] min-h-96 flex-col divide-y overflow-y-auto rounded-md border">
         {visible.length === 0 ? (
           <li className="p-4 text-sm text-muted-foreground">Không có câu nào khớp bộ lọc.</li>
         ) : null}

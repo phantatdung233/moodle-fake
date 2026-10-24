@@ -1,31 +1,59 @@
 import { describe, expect, it, afterEach } from "vitest";
 
-import { DEFAULT_GEMINI_MODEL, getGeminiModel } from "./config";
+import {
+  DEFAULT_EXPLAIN_BASE_URL,
+  DEFAULT_EXPLAIN_MODEL,
+  getExplainBaseUrl,
+  getExplainModel,
+} from "./config";
 
-describe("getGeminiModel", () => {
-  const original = process.env.GEMINI_MODEL;
+describe("getExplainModel", () => {
+  const original = process.env.EXPLAIN_MODEL;
 
   afterEach(() => {
     if (original === undefined) {
-      delete process.env.GEMINI_MODEL;
+      delete process.env.EXPLAIN_MODEL;
     } else {
-      process.env.GEMINI_MODEL = original;
+      process.env.EXPLAIN_MODEL = original;
     }
   });
 
-  it("mặc định là gemini-2.5-flash khi không có env", () => {
-    delete process.env.GEMINI_MODEL;
-    expect(DEFAULT_GEMINI_MODEL).toBe("gemini-2.5-flash");
-    expect(getGeminiModel()).toBe("gemini-2.5-flash");
+  it("mặc định là model DeepSeek của River AI khi không có env", () => {
+    delete process.env.EXPLAIN_MODEL;
+    expect(DEFAULT_EXPLAIN_MODEL).toBe("deepseek-ai/DeepSeek-V4.1-Flash");
+    expect(getExplainModel()).toBe("deepseek-ai/DeepSeek-V4.1-Flash");
   });
 
-  it("đọc model từ env GEMINI_MODEL", () => {
-    process.env.GEMINI_MODEL = "gemini-3.0-pro";
-    expect(getGeminiModel()).toBe("gemini-3.0-pro");
+  it("đọc model từ env EXPLAIN_MODEL", () => {
+    process.env.EXPLAIN_MODEL = "model-khac";
+    expect(getExplainModel()).toBe("model-khac");
   });
 
   it("bỏ qua env rỗng hoặc chỉ có khoảng trắng", () => {
-    process.env.GEMINI_MODEL = "   ";
-    expect(getGeminiModel()).toBe("gemini-2.5-flash");
+    process.env.EXPLAIN_MODEL = "   ";
+    expect(getExplainModel()).toBe(DEFAULT_EXPLAIN_MODEL);
+  });
+});
+
+describe("getExplainBaseUrl", () => {
+  const original = process.env.EXPLAIN_BASE_URL;
+
+  afterEach(() => {
+    if (original === undefined) {
+      delete process.env.EXPLAIN_BASE_URL;
+    } else {
+      process.env.EXPLAIN_BASE_URL = original;
+    }
+  });
+
+  it("mặc định là endpoint River AI", () => {
+    delete process.env.EXPLAIN_BASE_URL;
+    expect(DEFAULT_EXPLAIN_BASE_URL).toBe("https://api.river.ai/v1");
+    expect(getExplainBaseUrl()).toBe("https://api.river.ai/v1");
+  });
+
+  it("đọc base URL từ env và bỏ dấu / ở cuối", () => {
+    process.env.EXPLAIN_BASE_URL = "http://localhost:8080/v1/";
+    expect(getExplainBaseUrl()).toBe("http://localhost:8080/v1");
   });
 });

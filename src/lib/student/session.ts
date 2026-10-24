@@ -1,9 +1,13 @@
 /**
  * The sinh viên's identity lives in its own httpOnly cookie — a different
  * cookie from the admin session, so the two can never be confused — because the
- * spec has no password for students (Spec, "Làm bài"). The cookie carries the
- * MSSV and the Attempt they are working on; the server re-checks that the
- * Attempt belongs to that MSSV before showing or saving anything.
+ * spec has no password for students (Spec, "Làm bài").
+ *
+ * The cookie holds **only** who the student is: MSSV and họ tên. It is entered
+ * once on the home page and then applies to every Quiz. Which Attempt belongs
+ * to them is always re-read from the database per Quiz, so one browser can have
+ * several open papers without the cookie having to name any of them (and
+ * "Làm lại" cannot get stuck pointing at the paper it just submitted).
  */
 import {
   isWithinMaxAge,
@@ -19,7 +23,8 @@ export const STUDENT_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 export type StudentIdentity = {
   /** Normalised MSSV (uppercase, trimmed). */
   studentId: string;
-  attemptId: string;
+  /** As the student typed it; shown back in the header. */
+  studentName: string;
 };
 
 export type StudentCookie = {
@@ -45,7 +50,7 @@ export async function createStudentSessionCookie(
   const value = await signToken(
     {
       studentId: identity.studentId,
-      attemptId: identity.attemptId,
+      studentName: identity.studentName,
       iat: Math.floor(Date.now() / 1000),
     },
     sessionSecret,
@@ -77,11 +82,13 @@ export async function readStudentSession(
     return null;
   }
 
-  const { studentId, attemptId } = payload;
+  const { studentId, studentName } = payload;
   if (typeof studentId !== "string" || studentId === "") return null;
-  if (typeof attemptId !== "string" || attemptId === "") return null;
+  // Cookies issued before the name was part of the identity are not usable:
+  // the home page always has the name, so signing in again costs one field.
+  if (typeof studentName !== "string" || studentName === "") return null;
 
-  return { studentId, attemptId };
+  return { studentId, studentName };
 }
 
 export function clearedStudentSessionCookie(): StudentCookie {

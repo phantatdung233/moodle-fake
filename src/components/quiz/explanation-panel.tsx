@@ -1,50 +1,61 @@
 "use client";
 
 /**
- * "Giải thích bằng AI" — panel stream giải thích Gemini cho MỘT Question.
+ * "Giải thích bằng AI" — panel stream giải thích AI cho MỘT Question.
  *
- * Dùng chung cho chế độ luyện tập (tự chạy sau khi xem đáp án) và trang tổng
- * kết (chỉ đọc cache). Đúng/sai không bao giờ đến từ đây: panel chỉ là lời giải
- * thích đi kèm kết quả chấm cục bộ, và mọi lỗi Gemini đều là thông báo mềm kèm
- * nút thử lại — không có màn hình vỡ.
+ * Dùng chung cho chế độ luyện tập và trang tổng kết. Đáp án hiện ngay sau khi
+ * chấm; lời giải thích chỉ được sinh khi sinh viên tự bấm — xem đáp án không
+ * tốn một lời gọi model. Đúng/sai không bao giờ đến từ panel: nó chỉ là lời
+ * giải thích đi kèm kết quả chấm cục bộ, và mọi lỗi model đều là thông báo mềm
+ * kèm nút thử lại — không có màn hình vỡ.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EXPLANATION } from "@/lib/gemini/messages";
 import { readExplanationFrames } from "@/lib/gemini/frame-reader";
 import { EXPLAIN_ROUTE } from "@/lib/gemini/request";
+import type { ExplanationContext } from "@/lib/gemini/explanation-format";
+import { ExplanationText } from "@/components/quiz/explanation-text";
 import { cn } from "@/lib/utils";
 
 export type ExplanationPanelProps = {
+  /** The Attempt on screen; the server checks it belongs to this MSSV. */
+  attemptId: string;
   questionId: string;
   /** The hash the page rendered; the server rejects a stale one. */
   questionHash: string;
   /**
-   * `practice`: the Question is already revealed, so stream right away.
-   * `summary`: exam paper submitted, so also stream right away.
+   * `practice`: the Question is already revealed; `summary`: the paper is
+   * submitted. Both show the panel, and both wait for a click.
    * `none`: nothing to explain yet (exam still open) — render nothing.
    */
   mode?: "practice" | "summary" | "none";
-  /** Cached text rendered by the server, so a seen Question never flashes empty. */
-  initialText?: string | null;
+  /**
+   * What the Question records (correct keys / accepted blanks) and what the
+   * sinh viên did, so a stored explanation from before the agreed format still
+   * gets a complete verdict line.
+   */
+  context?: ExplanationContext;
   className?: string;
 };
 
 type Status = "idle" | "streaming" | "done" | "error";
 
-const NETWORK_ERROR = "Không tải được giải thích. Kiểm tra kết nối rồi thử lại.";
+const NETWORK_ERROR =
+  "Không tải được giải thích. Kiểm tra kết nối rồi thử lại.";
 
 export function ExplanationPanel({
+  attemptId,
   questionId,
   questionHash,
   mode = "practice",
-  initialText = null,
+  context,
   className,
 }: ExplanationPanelProps) {
-  const [text, setText] = useState(initialText ?? "");
+  const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<Status>(initialText ? "done" : "idle");
+  const [status, setStatus] = useState<Status>("idle");
   // A retry or a jump to another Question must abandon the previous request.
   const requestId = useRef(0);
   const abort = useRef<AbortController | null>(null);
@@ -63,7 +74,7 @@ export function ExplanationPanel({
       const response = await fetch(EXPLAIN_ROUTE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId, questionHash }),
+        body: JSON.stringify({ attemptId, questionId, questionHash }),
         signal: controller.signal,
       });
 
@@ -95,20 +106,9 @@ export function ExplanationPanel({
       setError(NETWORK_ERROR);
       setStatus("error");
     }
-  }, [questionId, questionHash]);
-
-  // Auto-start once for practice/summary; the Question is already revealed there.
-  useEffect(() => {
-    if (mode === "none" || initialText) return;
-    void load();
-    return () => {
-      requestId.current += 1;
-      abort.current?.abort();
-    };
-  }, [mode, questionId, questionHash, initialText, load]);
+  }, [attemptId, questionId, questionHash]);
 
   if (mode === "none") return null;
-
   const streaming = status === "streaming";
 
   return (
@@ -117,25 +117,59 @@ export function ExplanationPanel({
       aria-busy={streaming}
       data-testid="explanation-panel"
       data-status={status}
-      className={cn("flex flex-col gap-2 rounded-lg border bg-muted/20 p-4", className)}
+      className={cn(
+        "flex flex-col gap-3 rounded-xl border border-dashed bg-muted/30 p-4",
+        className,
+      )}
     >
-      <p className="flex items-center gap-2 text-sm font-medium">
-        <Sparkles className="size-4 text-muted-foreground" aria-hidden />
-        Giải thích bằng AI
-        {streaming ? <Loader2 className="size-3 animate-spin text-muted-foreground" aria-hidden /> : null}
-      </p>
+      <div className="flex items-center gap-2">
+        <Sparkles
+          className="size-4 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+        <span className="text-sm font-medium">Giải thích bằng AI</span>
+        {streaming ? (
+          <Loader2
+            className="size-3 animate-spin text-muted-foreground"
+            aria-hidden
+          />
+        ) : null}
+        {status === "done" ? (
+          <span className="ml-auto text-xs text-muted-foreground">
+            Do AI viết, chỉ để tham khảo
+          </span>
+        ) : null}
+      </div>
 
-      {text ? (
-        <div className="whitespace-pre-wrap text-sm leading-relaxed text-pretty">{text}</div>
+      {status === "idle" ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void load()}
+            className="shrink-0 bg-background"
+          >
+            <Sparkles aria-hidden /> Giải thích bằng AI
+          </Button>
+        </div>
       ) : null}
 
+      {text ? <ExplanationText text={text} context={context} /> : null}
+
       {error ? (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <p role="alert" className="text-sm text-muted-foreground">
             {error}
           </p>
-          <Button type="button" variant="outline" size="sm" onClick={() => void load()} className="self-start">
-            <RotateCcw /> Thử lại
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void load()}
+            className="shrink-0 bg-background"
+          >
+            <RotateCcw aria-hidden /> Thử lại
           </Button>
         </div>
       ) : null}

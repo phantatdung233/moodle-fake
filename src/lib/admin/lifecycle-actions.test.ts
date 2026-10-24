@@ -58,9 +58,10 @@ async function signInAsAdmin(): Promise<void> {
   jar.admin = (await createAdminSessionCookie()).value;
 }
 
-async function signInAsStudent(studentId: string, attemptId: string): Promise<void> {
+/** Identity only: each action resolves the student's Attempt for the Quiz. */
+async function signInAsStudent(studentId: string): Promise<void> {
   jar.student = (
-    await createStudentSessionCookie({ studentId, attemptId }, process.env.SESSION_SECRET)
+    await createStudentSessionCookie({ studentId, studentName: "Sinh viên" }, process.env.SESSION_SECRET)
   ).value;
 }
 
@@ -159,9 +160,9 @@ describe("student submit action", () => {
   it("nộp bài qua action, rồi trang tổng kết đọc đúng lượt của mình", async () => {
     const started = await resumeOrStartAttempt({ quizId, studentId: "B2012345", studentName: "An" });
     if (!started.ok) throw new Error(started.error);
-    await signInAsStudent("B2012345", started.attempt.id);
+    await signInAsStudent("B2012345");
 
-    const submitted = await studentActions.submitMyAttempt();
+    const submitted = await studentActions.submitMyAttempt({ attemptId: started.attempt.id });
     expect(submitted).toMatchObject({ ok: true, status: "submitted" });
 
     const summary = await studentActions.loadSummary({ quizId });
@@ -175,8 +176,8 @@ describe("student submit action", () => {
     const theirs = await resumeOrStartAttempt({ quizId, studentId: "B9999999", studentName: "Bình" });
     if (!mine.ok || !theirs.ok) throw new Error("start failed");
 
-    await signInAsStudent("B2012345", mine.attempt.id);
-    await studentActions.submitMyAttempt();
+    await signInAsStudent("B2012345");
+    await studentActions.submitMyAttempt({ attemptId: mine.attempt.id });
 
     const summary = await studentActions.loadSummary({ quizId });
     expect(summary?.history.map((attempt) => attempt.id)).toEqual([mine.attempt.id]);
@@ -188,7 +189,8 @@ describe("student submit action", () => {
   });
 
   it("không nộp được khi chưa có danh tính sinh viên", async () => {
-    expect(await studentActions.submitMyAttempt()).toEqual({
+    // No cookie: the MSSV is unknown, so no Attempt could be theirs.
+    expect(await studentActions.submitMyAttempt({ attemptId: "6a1b2c3d4e5f60718293a4b5" })).toEqual({
       ok: false,
       error: "Bạn cần nhập MSSV và họ tên trước khi làm bài.",
     });

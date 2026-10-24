@@ -18,6 +18,7 @@ import {
   submitAttempt,
 } from "@/lib/quiz/attempt-repository";
 import { clearTestDatabase, startTestDatabase, stopTestDatabase } from "@/test/mongo";
+import { RESULTS_PAGE_SIZE } from "@/lib/admin/results-repository";
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: () => undefined, set: vi.fn(), delete: vi.fn() }),
@@ -128,5 +129,25 @@ describe("/admin/results", () => {
     expect(markup).toContain(
       `href="/admin/results/export.csv?quizId=${quizId}&amp;studentId=B2012345"`,
     );
+  });
+
+  it("hiện 'Trang sau' mang theo bộ lọc, và 'Trang đầu' khi đang ở trang sau", async () => {
+    // One more Attempt than a page holds, so the first page has a successor.
+    for (let index = 0; index <= RESULTS_PAGE_SIZE; index += 1) {
+      await takeAttempt(quizId, `B${index}`, `Sinh viên ${index}`);
+    }
+
+    const first = await html();
+    expect(first).toContain("Trang sau");
+    expect(first).not.toContain("Trang đầu");
+
+    const cursor = /href="\/admin\/results\?cursor=([^"]+)"/.exec(first)?.[1];
+    expect(cursor).toBeDefined();
+
+    const second = await html({ cursor: decodeURIComponent(cursor ?? "") });
+    expect(second).toContain("Trang đầu");
+    expect(second).toContain("Hết danh sách");
+    // An unreadable cursor shows the first page instead of an error.
+    expect(await html({ cursor: "rác" })).toContain("Trang sau");
   });
 });

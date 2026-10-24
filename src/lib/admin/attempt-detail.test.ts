@@ -1,7 +1,7 @@
 /**
  * Seam: `/admin/results/[attemptId]`'s data. The tests read an Attempt through
  * `getAttemptDetail` the way the giảng viên's page does — every Question, the
- * answer, the correct answer, the score and the cached explanation.
+ * answer, the correct answer and the score.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -16,7 +16,6 @@ import {
   resumeOrStartAttempt,
   submitAttempt,
 } from "@/lib/quiz/attempt-repository";
-import { saveExplanation } from "@/lib/gemini/cache";
 import { clearTestDatabase, startTestDatabase, stopTestDatabase } from "@/test/mongo";
 
 const MOODLE_FILE = path.resolve(process.cwd(), "moodle_quiz_merged.json");
@@ -127,20 +126,13 @@ describe("getAttemptDetail", () => {
     expect(question?.graded).toEqual({ correct: false, score: 0.5 });
   });
 
-  it("hiện giải thích đã cache theo hash của câu trong bản đề, không gọi model", async () => {
+  it("không kèm giải thích nào: chi tiết lượt làm chỉ có phần chấm", async () => {
     const started = await resumeOrStartAttempt({ quizId, studentId: "B1", studentName: "An" });
     if (!started.ok) throw new Error(started.error);
-    const q001 = started.attempt.questionsSnapshot.find((question) => question.id === "Q001")!;
-    await saveExplanation({
-      questionHash: q001.hash,
-      questionId: "Q001",
-      text: "Đáp án e đúng vì biến được gán trước khi in.",
-    });
 
     const detail = await getAttemptDetail(started.attempt.id);
 
-    expect(detail?.questions[0].explanation).toBe("Đáp án e đúng vì biến được gán trước khi in.");
-    expect(detail?.questions[1].explanation).toBeNull();
+    expect(detail?.questions.every((question) => question.explanation === null)).toBe(true);
   });
 
   it("trả null cho id không hợp lệ hoặc không tồn tại", async () => {

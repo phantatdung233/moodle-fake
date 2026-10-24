@@ -12,6 +12,9 @@ import type { CodeLineItem } from "@/lib/quiz/markdown";
  * between. That keeps the blank input exactly at its marker's column instead of
  * being pushed to the end of the line, while each run still gets its colours
  * (`print(` before a blank is still a function call).
+ *
+ * `HighlightedRun` is a plain object, so `prepareQuestionContent` can hand the
+ * result of `highlightLines` straight to a client component as a prop.
  */
 
 const SHIKI_OPTIONS = { lang: "python", theme: "github-light", structure: "inline" } as const;

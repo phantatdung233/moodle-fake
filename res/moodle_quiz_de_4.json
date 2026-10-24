@@ -1,0 +1,1477 @@
+[
+  {
+    "no": 136,
+    "id": "Q136",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Đoạn chương trình sau có mục đích gì?\ntry:\n# đoạn code có thể gây ra lỗi\n    pass\nexcept (TypeError, ZeroDivisionError):\n    print(\"Python Quiz\")",
+    "options": [
+      {
+        "key": "a",
+        "text": "In ra ' Python Quiz ' nếu không có ngoại lệ xảy ra.",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "In ra ' Python Quiz ' nếu có ngoại lệ xảy ra (không quan trọng là ngoại lệ gì).",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "Chỉ in ra ' Python Quiz ' khi cả hai ngoại lệ TypeError và ZeroDivisionError cùng xảy ra.",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "In ra ' Python Quiz ' nếu một trong hai ngoại lệ TypeError và ZeroDivisionError xảy ra.",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 137,
+    "id": "Q137",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Lệnh nào sau đây dùng để truy xuất giá trị theo key trong dictionary dic1?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "dic1[\"key\"]",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "dic1.pop()",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "dic1.value()",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "dict2.key()",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 138,
+    "id": "Q138",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Lệnh nào sau đây dùng để tách xâu?",
+    "options": [
+      {
+        "key": "a",
+        "text": "copy()",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "remove()",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "join()",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "split()",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 139,
+    "id": "Q139",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Điền … để được kết quả 66 44 22 trong đoạn lệnh sau?\n\nfor i in range(6, 0, … ):\n\n    print(str(i) * 2)",
+    "options": [
+      {
+        "key": "a",
+        "text": "None",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "-1",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "0",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "-2",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 140,
+    "id": "Q140",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Quy tắc đặt tên nào sau đây là đúng cho biến Python?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Tên biến có thể trùng với các từ khóa (keyword)",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Tên biến có thể có các ký hiệu đặc biệt như !, @, #, $, %,...",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "Tên biến có thể bắt đầu bằng một chữ số",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Tên biến có thể chứa dấu gạch dưới \"_\"",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 141,
+    "id": "Q141",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Lệnh nào sau đây cho phép xóa đối tượng dictionary?",
+    "options": [
+      {
+        "key": "a",
+        "text": "truncate",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "del",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "empty",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "clear",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 142,
+    "id": "Q142",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Để xóa 2 phần tử đầu tiên trong danh sách a?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "del(a[0:2])",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "del(a[1:2])",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "del(a[1:1])",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "del(a[0:1])",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 143,
+    "id": "Q143",
+    "type": "multianswer",
+    "state": "answersaved",
+    "question": "Điền …  để in các giá trị i nhỏ hơn 6 ở khối lệnh sau:\ni = 1\n[[1]] i < 6 [[2]]\n    print(i)\n    i += 1",
+    "options": [],
+    "blanks": [
+      {
+        "name": "Q143_blank1",
+        "value": "while"
+      },
+      {
+        "name": "Q143_blank2",
+        "value": ":"
+      }
+    ],
+    "images": []
+  },
+  {
+    "no": 144,
+    "id": "Q144",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Numpy là gì?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Thư viện tính toán khoa học",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Nền tảng phát triển ứng dụng website",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "Thư viện vẽ đồ thị",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Nền tảng học máy",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "f",
+        "text": "Tất cả đều đúng",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 145,
+    "id": "Q145",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Khi khai báo module, trình thông dịch sẽ tìm đến thư mục nào đầu tiên để nạp module?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Thư mục hiện hành mà script đang gọi",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Đường dẫn mặc định trong hệ thống (Linux/Unix)",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "Thư mục trong PYTHONPATH",
+        "selected": true
+      },
+      {
+        "key": "d",
+        "text": "Tất cả đều sai",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 146,
+    "id": "Q146",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Kết quả của chương trình sau là:\n\ndef PhepNhan(Number):\n        return Number ** 2;\nprint(PhepNhan(5))",
+    "options": [
+      {
+        "key": "a",
+        "text": "Lỗi",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "5",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "25",
+        "selected": true
+      },
+      {
+        "key": "e",
+        "text": "10",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 147,
+    "id": "Q147",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Phát biểu nào sau đây là đúng khi nói về các phương thức trong python?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Lệnh find sẽ tìm vị trí đầu tiên của xâu con trong xâu mẹ",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Python có một lệnh đặc biệt dành riêng cho xâu kí tự",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "Câu lệnh find có một cú pháp duy nhất",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Cú pháp của lệnh find là: <xâu mẹ>. Find(<xâu con>)",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 148,
+    "id": "Q148",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Trong Python, cấu trúc try … exception… dùng để làm gì?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Xử lý các ngoại lệ tránh chương trình dừng đột ngột",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "Để bắt lấy các giá trị đang xử lý trong khối lệnh",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Kiểm tra đoạn lệnh có đúng với yêu cầu chức năng",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 149,
+    "id": "Q149",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Làm thế nào để vẽ biểu đồ đường đơn giản?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "create_line_graph(x_values, y_values)",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "lineplot(x_values, y_values)",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "plot(x_values, y_values)",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "draw_line(x_values, y_values)",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 150,
+    "id": "Q150",
+    "type": "multianswer",
+    "state": "invalidanswer",
+    "question": "Tạo cú pháp lambda với hai tham số a, b truyền vào và trả về giá trị biểu thức a2 + b?\n\nx = [[1]] [[2]] [[3]] [[4]]\nPlease answer all parts of the question.",
+    "options": [],
+    "blanks": [
+      {
+        "name": "Q150_blank1",
+        "value": "lambda"
+      },
+      {
+        "name": "Q150_blank2",
+        "value": "a, b"
+      },
+      {
+        "name": "Q150_blank3",
+        "value": ":"
+      },
+      {
+        "name": "Q150_blank4",
+        "value": "a**2 + b"
+      }
+    ],
+    "images": []
+  },
+  {
+    "no": 151,
+    "id": "Q151",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Phương thức xticks() dùng để?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Nhãn cho đánh dấu",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Đánh dấu trên x-axis",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "Đánh dấu trên y-axis",
+        "selected": true
+      },
+      {
+        "key": "d",
+        "text": "Vị trí của đánh dấu",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "Tất cả đều sai",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 152,
+    "id": "Q152",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Chương trình sau bị lỗi ở dòng lệnh thứ bao nhiêu?\n(1)    def add(a, b):\n(2)            x = a + b\n(3)            return(x)\n(4)    add(1, 2)\n(5)    add(5, 6)",
+    "options": [
+      {
+        "key": "a",
+        "text": "2",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "Không có lỗi",
+        "selected": true
+      },
+      {
+        "key": "d",
+        "text": "3",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "5",
+        "selected": false
+      },
+      {
+        "key": "f",
+        "text": "4",
+        "selected": false
+      },
+      {
+        "key": "g",
+        "text": "1",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 153,
+    "id": "Q153",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Cho biết giá trị của x sau khi thực hiện đoạn lệnh sau:\nx, a, b = 0, 5, 5\nif a > 0:\n    if b < 0:\n        x = x + 5\n    elif a > 5:\n        x = x + 4\n    else:\n        x = x + 3\nelse:\n    x = x + 2",
+    "options": [
+      {
+        "key": "a",
+        "text": "4",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "5",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "6",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "2",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "3",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 154,
+    "id": "Q154",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Tham số agg_filter trong Matplotlib dùng để?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Lọc dữ liệu tổng hợp",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Điều chỉnh các thông số tổng hợp",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "Cài đặt bộ lọc tổng hợp",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "Áp dụng bộ lọc cho hình ảnh tổng hợp",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 155,
+    "id": "Q155",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Chương trình sau bị lỗi ở dòng lệnh thứ:\n(1) b=20\n(2) def msg():\n(3)       a=10\n(4)       print (\"Gia tri cua a la\",a)\n(5)       print (\"Gia tri cua b la\",b)\n(6)       return msg()\n(7) print(b)",
+    "options": [
+      {
+        "key": "a",
+        "text": "1",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Không có lỗi",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "5",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "6",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "7",
+        "selected": false
+      },
+      {
+        "key": "f",
+        "text": "2",
+        "selected": false
+      },
+      {
+        "key": "g",
+        "text": "3",
+        "selected": false
+      },
+      {
+        "key": "h",
+        "text": "4",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 156,
+    "id": "Q156",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Cho biết kết quả sau khi thực hiện đoạn lệnh sau:\nprint('False') if None else print('True')",
+    "options": [
+      {
+        "key": "a",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Lỗi",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "False",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "True",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 157,
+    "id": "Q157",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Cho biết kết quả của đoạn chương trình sau:\n\ns1={1,2,3,4,5}\ns2={4,5}\n\nprint (\"A\") if s2.issubset(s1) else print (\"B\")",
+    "options": [
+      {
+        "key": "a",
+        "text": "\"B\"",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Lỗi",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "\"A\"",
+        "selected": true
+      },
+      {
+        "key": "d",
+        "text": "\"A\" \"B\"",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 158,
+    "id": "Q158",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Phương thức grid() dùng để?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Chỉnh khoảng cách lưới",
+        "selected": true
+      },
+      {
+        "key": "b",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "Đặt màu sắc cho lưới",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Xóa đường lưới",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "Hiển thị lưới (grid)",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 159,
+    "id": "Q159",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Lệnh nào để xóa một phần tử theo key?",
+    "options": [
+      {
+        "key": "a",
+        "text": ".del()",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": ".remove()",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": ".popitem()",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": ".pop()",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 160,
+    "id": "Q160",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Chuyển một list trong python sang mảng numpy?",
+    "options": [
+      {
+        "key": "a",
+        "text": "create.array(list)",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "numpy(list)",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "array(list)",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "np.array(list)",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 161,
+    "id": "Q161",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Trong các phát biểu sau, phát biểu nào chưa chính xác?",
+    "options": [
+      {
+        "key": "a",
+        "text": "for là lệnh lặp với số lần xác định trước.",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Khối lệnh lặp while được thực hiện cho đến khi <điều kiện >= False.",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "Số lần lặp của lệnh lặp for luôn được xác định bởi vùng giá trị của lệnh range().",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "while là lệnh lặp với số lần không biết trước.",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 162,
+    "id": "Q162",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Loại dữ liệu tập hợp nào sau đây có tính thứ tự và không thể thay đổi, phần tử không trùng lặp về giá trị?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Set",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Dictionary",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "List",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Tuple",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 163,
+    "id": "Q163",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Loại dữ liệu tập hợp nào sau đây không có tính thứ tự và không thay đổi, không chỉ mục, phần tử không trùng lặp?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Dictionary",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Tuple",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "List",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Set",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 164,
+    "id": "Q164",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Lệnh đặt nhãn x và y và tiêu đề của biểu đồ?",
+    "options": [
+      {
+        "key": "a",
+        "text": "ax.set((xlabel, ylabel, title), ('Year', 'Amount’,     'Title of Graph'))",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "ax.set(xlabel='Year', ylabel='Amount', title='Title of Graph')",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "ax.set(xlabel='Year'), ax.set(ylabel='Amount'), ax.set(title='Title of Graph')",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "ax.(xlabel='Year', ylabel='Amount', title='Title of Graph')",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 165,
+    "id": "Q165",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Kết quả của chương trình sau là bao nhiêu?\ns = \"Hôm nay tôi đi học \"\ndef kq(name):\n      s = \"Hello World\"\n      s = s + \"!!!\"\n      return s\nprint(s)",
+    "options": [
+      {
+        "key": "a",
+        "text": "\"Hello World!!!\"",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "\"Hôm nay tôi đi học\"",
+        "selected": true
+      },
+      {
+        "key": "d",
+        "text": "\"Hello World\"",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "Chương trình bị lỗi",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 166,
+    "id": "Q166",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Cho biết kết quả của lệnh sau:\n\nprint(100 >= 100**2)",
+    "options": [
+      {
+        "key": "a",
+        "text": "True",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "None",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "False",
+        "selected": true
+      },
+      {
+        "key": "d",
+        "text": "100 >= 100 ** 2",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 167,
+    "id": "Q167",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Cú pháp để kiểm tra số chiều của một mảng là?",
+    "options": [
+      {
+        "key": "a",
+        "text": "array.ndim",
+        "selected": true
+      },
+      {
+        "key": "b",
+        "text": "array.dnim()",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "array.dim",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "array.dim()",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "Tất cả đều sai",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 168,
+    "id": "Q168",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Câu lệnh sau giải bài toán nào:\n\nwhile m != n:\n\n    if m > n:\n\n        m = m - n\n\n    else:\n\n        n = n - m",
+    "options": [
+      {
+        "key": "a",
+        "text": "Tìm BCNN (m, n)",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Tìm hiệu nhỏ nhất (m, n)",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "Tìm hiệu lớn nhất (m, n)",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Tìm UCLN (m, n)",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 169,
+    "id": "Q169",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Cho danh sách a = [1, 2, 3, 4, 5]. Lệnh nào dưới đây sẽ trả về giá trị lớn nhất trong danh sách?",
+    "options": [
+      {
+        "key": "a",
+        "text": "a.maximum()",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "max(a)",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "a.largest()",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "a.max",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "a.max()",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 170,
+    "id": "Q170",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Cú pháp trả về kích thước (shape) của một mảng?",
+    "options": [
+      {
+        "key": "a",
+        "text": "arr.shape()",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "arr.shape",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "shape(arr)",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 171,
+    "id": "Q171",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Cho biết giá trị của biến c trong phép toán sau:\n\na = 4 + 0j, b = 2 - j, c = a + b",
+    "options": [
+      {
+        "key": "a",
+        "text": "Lỗi chương trình",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "6 – j",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "2 + j",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "2",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 172,
+    "id": "Q172",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Cho biết kết quả khi chạy đoạn chương trình sau:\n\ns = 0\n\nfor i in range(3):\n\n    s = s + 2 * i\n\nprint(s)",
+    "options": [
+      {
+        "key": "a",
+        "text": "12",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "10",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "8",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "6",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 173,
+    "id": "Q173",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Cho biết giá trị của x == y với:\n\nx = 3\ny = 2.9999999999999999",
+    "options": [
+      {
+        "key": "a",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "True",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "False",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Lỗi",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 174,
+    "id": "Q174",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Phát biểu nào sau đây là sai?",
+    "options": [
+      {
+        "key": "a",
+        "text": "Có thể truy cập từng kí tự của chuỗi thông qua chỉ số",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Chỉ số bắt đầu từ 0",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "Python không có kiểu dữ liệu kí tự",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "Có thể thay đổi từng kí tự của một chuỗi",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 175,
+    "id": "Q175",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Dấu nào sau đây để chú thích từng dòng trong code?",
+    "options": [
+      {
+        "key": "a",
+        "text": "// hoặc ///",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "/*  */ hoặc <!--   -->",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "--",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "#",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 176,
+    "id": "Q176",
+    "type": "multianswer",
+    "state": "invalidanswer",
+    "question": "Điền vào … để in ra chuỗi “Python programming” với yêu cầu điều kiện a không bằng b?\na = 50; b = 10\n[[1]] a [[2]] b [[3]]\n  print(\"Python programming\")\nPlease answer all parts of the question.",
+    "options": [],
+    "blanks": [
+      {
+        "name": "Q176_blank1",
+        "value": "if"
+      },
+      {
+        "name": "Q176_blank2",
+        "value": "!="
+      },
+      {
+        "name": "Q176_blank3",
+        "value": ":"
+      }
+    ],
+    "images": []
+  },
+  {
+    "no": 177,
+    "id": "Q177",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Tính tích tích lũy theo một trục nhất định của mảng arr trong numpy là?",
+    "options": [
+      {
+        "key": "a",
+        "text": "arr.cumprod()",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "prod(arr)",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "Tất cả đều sai",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "np.multiply(arr)",
+        "selected": false
+      },
+      {
+        "key": "e",
+        "text": "np.cumprod(arr)",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 178,
+    "id": "Q178",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Lệnh sau trả lại giá trị gì?\n\nprint(\"abcdabcd\".find(\"cd\"))\n\nprint(\"abcdabcd\".find(\"cd\", 4))",
+    "options": [
+      {
+        "key": "a",
+        "text": "2\n\n2",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "2\n\n6",
+        "selected": true
+      },
+      {
+        "key": "c",
+        "text": "2\n\n7",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "3\n\n3",
+        "selected": false
+      }
+    ],
+    "blanks": [],
+    "images": []
+  },
+  {
+    "no": 179,
+    "id": "Q179",
+    "type": "multianswer",
+    "state": "answersaved",
+    "question": "In ra đối tượng thứ #2 trong danh sách sau:\nfruits = [\"apple\", \"banana\", \"cherry\"]\nprint([[1]])",
+    "options": [],
+    "blanks": [
+      {
+        "name": "Q179_blank1",
+        "value": "fruits[1]"
+      }
+    ],
+    "images": []
+  },
+  {
+    "no": 180,
+    "id": "Q180",
+    "type": "multichoice",
+    "state": "answersaved",
+    "question": "Cho biết kết quả của đoạn chương trình sau:\n\nT1 = (1, 9, 1, 6, 3, 4, 5, 1, 1, 2, 5, 6, 7, 8, 9, 2)\ns1 = set(T1)\nprint (s1)",
+    "options": [
+      {
+        "key": "a",
+        "text": "[1, 9, 1, 6, 3, 4, 5, 1, 1, 2, 5, 6, 7, 8, 9, 2]",
+        "selected": false
+      },
+      {
+        "key": "b",
+        "text": "Lỗi",
+        "selected": false
+      },
+      {
+        "key": "c",
+        "text": "{1, 9, 1, 6, 3, 4, 5, 1, 1, 2, 5, 6, 7, 8, 9, 2}",
+        "selected": false
+      },
+      {
+        "key": "d",
+        "text": "{1, 2, 3, 4, 5, 6, 7, 8, 9}",
+        "selected": true
+      }
+    ],
+    "blanks": [],
+    "images": []
+  }
+]

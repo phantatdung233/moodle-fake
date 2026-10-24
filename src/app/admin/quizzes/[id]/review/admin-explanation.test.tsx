@@ -5,9 +5,9 @@ import type { ReactElement } from "react";
 import { AdminExplanation } from "./admin-explanation";
 
 /**
- * Story 21, client half: the admin's explanation block only shows what the
- * server handed it. No heuristic decides that an answer "looks wrong" — the
- * button is the only reason Gemini is ever called.
+ * Story 21, client half: the admin's explanation block starts empty every time.
+ * No heuristic decides that an answer "looks wrong" — the button is the only
+ * reason the model is ever called.
  */
 function render(props: Partial<Parameters<typeof AdminExplanation>[0]> = {}): string {
   return renderToStaticMarkup(
@@ -16,7 +16,6 @@ function render(props: Partial<Parameters<typeof AdminExplanation>[0]> = {}): st
         quizId="6a1b2c3d4e5f60718293a4b5"
         questionId="Q001"
         questionHash="abc"
-        initialText={null}
         {...props}
       />
     ) as ReactElement,
@@ -34,13 +33,12 @@ describe("AdminExplanation", () => {
     expect(html).not.toContain("đã có sẵn");
   });
 
-  it("đã có giải thích trong cache: hiện ngay văn bản, dấu 'đã có sẵn' và nút sinh lại", () => {
-    const html = render({ initialText: "Đáp án ghi nhận là sort()." });
+  it("không giữ văn bản nào giữa các lần mở: mỗi câu hỏi được sinh lại", () => {
+    const html = render({ questionId: "Q002", questionHash: "xyz" });
 
-    expect(html).toContain('data-status="done"');
-    expect(html).toContain("Đáp án ghi nhận là sort().");
-    expect(html).toContain("đã có sẵn");
-    expect(html).toContain("Sinh lại giải thích");
+    expect(html).toContain('data-status="idle"');
+    expect(html).toContain("Giải thích bằng AI");
+    expect(html).not.toContain("Sinh lại giải thích");
   });
 
   it("nhắc rằng đáp án vẫn do giảng viên quyết định", () => {

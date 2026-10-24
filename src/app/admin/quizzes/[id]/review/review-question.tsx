@@ -13,9 +13,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { QuizQuestion } from "@/lib/quiz/quiz.model";
-import { QuestionContent, QuestionImages } from "@/components/quiz/question-content";
+import {
+  QuestionContent,
+  QuestionImages,
+} from "@/components/quiz/question-content";
+import type { RenderedQuestionContent } from "@/components/quiz/question-blocks";
 import { reviewAnswer, reviewRemoveQuestion } from "@/lib/admin/review-actions";
 import { AdminExplanation } from "./admin-explanation";
 
@@ -27,7 +32,23 @@ export type ReviewQueueSummary = {
   reviewPath: string;
   readyCount: number;
   remaining: number;
+  /** Draft copy may invite a publish; published/archived may not. */
+  quizStatus: "draft" | "published" | "archived";
 };
+
+/** The "nothing left to review" sentence, which depends on the Quiz's status. */
+function doneDescription(done: ReviewQueueSummary, allDone: boolean): string {
+  if (!allDone)
+    return "Mọi câu đang bật đều đã có đáp án, hoặc không còn câu nào trong đề.";
+  const count = `Tất cả ${done.readyCount} câu đang bật đã có đáp án.`;
+  if (done.quizStatus === "draft") {
+    return `${count} Đề vẫn là nháp — bạn có thể xem lại đáp án hoặc publish.`;
+  }
+  if (done.quizStatus === "published") {
+    return `${count} Đề đã publish. Bấm "Xem lại đáp án" nếu muốn rà lại từng câu.`;
+  }
+  return `${count} Đề đã lưu trữ nên chỉ xem lại được.`;
+}
 
 type Props = {
   /** `null` when the queue is empty (or the quiz is read-only with nothing left). */
@@ -39,8 +60,12 @@ type Props = {
   answeredCount: number;
   /** The enabled `ready` Question ids, for the "Xem lại đáp án" list. */
   readyQueue: string[];
-  /** Gemini's stored explanation for the shown Question, or `null` when none. */
-  cachedExplanation: string | null;
+  /** A stored explanation for the shown Question, or `null` when none. */
+  /**
+   * Each reviewed Question's body, pre-parsed and pre-highlighted on the server
+   * (`questionId → blocks`) so this client component never awaits shiki.
+   */
+  questionBodies: Record<string, RenderedQuestionContent[]>;
   /** Where "Sửa đáp án" / "Quay lại duyệt" point on this page. */
   reviewPath: string;
   recheckPath: string;
@@ -60,7 +85,7 @@ export function ReviewQuestion({
   totalCount,
   answeredCount,
   readyQueue,
-  cachedExplanation,
+  questionBodies,
   reviewPath,
   recheckPath,
   done,
@@ -118,9 +143,15 @@ export function ReviewQuestion({
       />
 
       {readOnly ? (
-        <p className="rounded-lg border border-amber-600/40 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-          Đề đã publish hoặc đã lưu trữ nên chỉ xem được đáp án. Muốn sửa, hãy huỷ
-          publish trước.
+        <p className="flex items-start gap-2 rounded-sm border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-foreground">
+          <TriangleAlert
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0"
+          />
+          <span>
+            Đề đã publish hoặc đã lưu trữ nên chỉ xem được đáp án. Muốn sửa, hãy
+            huỷ publish trước.
+          </span>
         </p>
       ) : null}
 
@@ -139,8 +170,13 @@ export function ReviewQuestion({
               <span className="font-mono">{question.id}</span>
               <span className="text-sm font-normal text-muted-foreground">
                 Câu {question.no} ·{" "}
-                {question.type === "multichoice" ? "Trắc nghiệm" : "Điền khuyết"} ·{" "}
-                {question.status === "needs_review" ? "Cần duyệt" : "Đã có đáp án"}
+                {question.type === "multichoice"
+                  ? "Trắc nghiệm"
+                  : "Điền khuyết"}{" "}
+                ·{" "}
+                {question.status === "needs_review"
+                  ? "Cần duyệt"
+                  : "Đã có đáp án"}
               </span>
             </CardTitle>
             <CardDescription>
@@ -149,78 +185,91 @@ export function ReviewQuestion({
                 : "Chọn đáp án đúng của câu này rồi lưu để chuyển sang câu kế tiếp."}
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-5">
-            <ReviewedQuestionContent question={question} />
-
-            {/* Story 21: the flag and the button only — no automatic guessing
-                at "this answer looks wrong". Tests inject a fake Gemini client. */}
-            <AdminExplanation
-              key={`${question.id}-explanation`}
-              quizId={done.quizId}
-              questionId={question.id}
-              questionHash={question.hash}
-              initialText={cachedExplanation}
-            />
-
-            {question.type === "multichoice" ? (
-              <MultichoiceForm
-                key={`${question.id}-mc`}
+          <CardContent className="flex flex-col gap-5 xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:items-start xl:gap-8">
+            {/* Wide screens: Question on the left, answer form on the right
+                (sticky), so the giảng viên reads and types without scrolling
+                back and forth. Narrow screens keep the single column. */}
+            <div className="flex min-w-0 flex-col gap-5">
+              <ReviewedQuestionContent
+                blocks={questionBodies[question.id] ?? []}
                 question={question}
-                disabled={pending || readOnly}
-                onSubmit={onSave}
               />
-            ) : (
-              <MultianswerForm
-                key={`${question.id}-ma`}
-                question={question}
-                disabled={pending || readOnly}
-                onSubmit={onSave}
-              />
-            )}
 
-            {readOnly ? null : (
-              <div className="border-t pt-4">
-                {confirmingRemove ? (
-                  <div className="flex flex-col gap-2 rounded-lg border border-destructive/40 p-3 text-sm">
-                    <p>
-                      Xoá câu <span className="font-mono font-medium">{question.id}</span>{" "}
-                      khỏi đề? Câu hỏi vẫn được lưu trong lịch sử nhưng không còn tính
-                      vào đề và không hiện cho sinh viên.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        disabled={pending}
-                        onClick={onRemove}
-                      >
-                        Xoá khỏi đề
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={pending}
-                        onClick={() => setConfirmingRemove(false)}
-                      >
-                        Giữ lại
-                      </Button>
+              {/* Story 21: the flag and the button only — no automatic guessing
+                  at "this answer looks wrong". Tests inject a fake AI client. */}
+              <AdminExplanation
+                key={`${question.id}-explanation`}
+                quizId={done.quizId}
+                questionId={question.id}
+                questionHash={question.hash}
+                acceptedAnswers={acceptedAnswersOf(question)}
+              />
+            </div>
+
+            <div className="flex flex-col gap-5 xl:sticky xl:top-4">
+              {question.type === "multichoice" ? (
+                <MultichoiceForm
+                  key={`${question.id}-mc`}
+                  question={question}
+                  disabled={pending || readOnly}
+                  onSubmit={onSave}
+                />
+              ) : (
+                <MultianswerForm
+                  key={`${question.id}-ma`}
+                  question={question}
+                  disabled={pending || readOnly}
+                  onSubmit={onSave}
+                />
+              )}
+
+              {readOnly ? null : (
+                <div className="border-t pt-4">
+                  {confirmingRemove ? (
+                    <div className="flex flex-col gap-2 rounded-sm border border-destructive-border bg-destructive-surface p-3 text-sm">
+                      <p>
+                        Xoá câu{" "}
+                        <span className="font-mono font-medium">
+                          {question.id}
+                        </span>{" "}
+                        khỏi đề? Câu hỏi vẫn được lưu trong lịch sử nhưng không
+                        còn tính vào đề và không hiện cho sinh viên.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          disabled={pending}
+                          onClick={onRemove}
+                        >
+                          Xoá khỏi đề
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() => setConfirmingRemove(false)}
+                        >
+                          Giữ lại
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => setConfirmingRemove(true)}
-                  >
-                    Xoá câu này khỏi đề
-                  </Button>
-                )}
-              </div>
-            )}
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setConfirmingRemove(true)}
+                    >
+                      Xoá câu này khỏi đề
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -251,28 +300,31 @@ function Progress({
   recheckPath: string;
   mode: ReviewPageMode;
 }) {
-  const percent = totalCount === 0 ? 100 : Math.round((answeredCount / totalCount) * 100);
+  const percent =
+    totalCount === 0 ? 100 : Math.round((answeredCount / totalCount) * 100);
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm font-medium">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+        <p className="shrink-0 text-sm font-medium tabular-nums">
           {answeredCount}/{totalCount} câu đã có đáp án
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            {percent}%
+          </span>
         </p>
-        <p className="text-xs text-muted-foreground">{percent}%</p>
-      </div>
-      <div
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={totalCount}
-        aria-valuenow={answeredCount}
-        aria-label="Tiến độ duyệt đáp án"
-        className="h-2 w-full overflow-hidden rounded-full bg-muted"
-      >
         <div
-          className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${percent}%` }}
-        />
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={totalCount}
+          aria-valuenow={answeredCount}
+          aria-label="Tiến độ duyệt đáp án"
+          className="h-2 w-full flex-1 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -318,11 +370,7 @@ function FinishedCard({
         <CardTitle>
           {allDone ? "Đã duyệt xong đáp án" : "Không còn câu nào cần sửa ở đây"}
         </CardTitle>
-        <CardDescription>
-          {allDone
-            ? `Tất cả ${done.readyCount} câu đang bật đã có đáp án. Đề vẫn là nháp — bạn có thể xem lại đáp án hoặc publish.`
-            : "Mọi câu đang bật đều đã có đáp án, hoặc không còn câu nào trong đề."}
-        </CardDescription>
+        <CardDescription>{doneDescription(done, allDone)}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
         <Button asChild>
@@ -331,6 +379,10 @@ function FinishedCard({
         {mode === "recheck" ? (
           <Button asChild variant="outline">
             <Link href={done.reviewPath}>Duyệt câu chưa có đáp án</Link>
+          </Button>
+        ) : allDone ? (
+          <Button asChild variant="outline">
+            <Link href={`${done.reviewPath}?tab=ready`}>Xem lại đáp án</Link>
           </Button>
         ) : null}
         <Button asChild variant="outline">
@@ -344,14 +396,36 @@ function FinishedCard({
 /**
  * The Question body exactly as a sinh viên sees it — the same renderer, so
  * `[[n]]` markers sit at their real positions in prose and in code. Blanks are
- * read-only here: the giảng viên edits the answers in the form below.
+ * read-only here: the giảng viên edits the answers in the form below. The
+ * blocks are prepared on the server (`prepareQuestionContent`), since this
+ * client component cannot await shiki.
  */
-function ReviewedQuestionContent({ question }: { question: QuizQuestion }) {
+/**
+ * What the Quiz records as correct, for the explanation's verdict line:
+ * the correct option keys, or one accepted answer per blank.
+ */
+function acceptedAnswersOf(question: QuizQuestion): string[] {
+  if (question.type === "multianswer") {
+    return question.blanks
+      .map((blank) => blank.acceptedAnswer)
+      .filter((answer) => answer !== "");
+  }
+  return question.options
+    .filter((option) => option.correct)
+    .map((option) => option.key);
+}
+
+function ReviewedQuestionContent({
+  blocks,
+  question,
+}: {
+  blocks: readonly RenderedQuestionContent[];
+  question: QuizQuestion;
+}) {
   return (
     <div className="flex flex-col gap-2 text-base">
       <QuestionContent
-        content={question.content}
-        blankCount={question.blanks.length}
+        blocks={blocks}
         renderBlank={(name) => (
           <span className="mx-0.5 inline-block min-w-16 rounded border border-dashed border-input bg-muted px-2 text-center font-mono text-sm text-muted-foreground">
             [[{name}]]
@@ -373,12 +447,16 @@ function MultichoiceForm({
   onSubmit: (answer: { selectedOptionKeys: string[] }) => void;
 }) {
   const [picked, setPicked] = useState<string[]>(() =>
-    question.options.filter((option) => option.correct).map((option) => option.key),
+    question.options
+      .filter((option) => option.correct)
+      .map((option) => option.key),
   );
 
   function toggle(key: string) {
     setPicked((current) =>
-      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+      current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key],
     );
   }
 
@@ -404,10 +482,8 @@ function MultichoiceForm({
             <label
               key={option.key}
               className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition-colors",
-                checked
-                  ? "border-primary bg-primary/5"
-                  : "hover:bg-muted/60",
+                "flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2 transition-colors duration-200",
+                checked ? "border-primary bg-primary/5" : "hover:bg-muted/60",
                 disabled && "cursor-not-allowed opacity-60",
               )}
             >
@@ -471,7 +547,7 @@ function MultianswerForm({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         {question.blanks.map((blank, index) => {
           const inputId = `${question.id}-blank-${index}`;
           return (
@@ -489,7 +565,9 @@ function MultianswerForm({
                 disabled={disabled}
                 autoComplete="off"
                 spellCheck={false}
-                aria-invalid={localError && values[index]?.trim() === "" ? true : undefined}
+                aria-invalid={
+                  localError && values[index]?.trim() === "" ? true : undefined
+                }
                 onChange={(event) =>
                   setValues((current) =>
                     current.map((value, position) =>

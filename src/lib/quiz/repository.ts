@@ -68,7 +68,7 @@ export async function createDraftQuizFromQuestions(
       status: "draft",
       version: 1,
       questions: input.questions.map((question) => {
-        // `explanation` is written by the Gemini cache later; a fresh draft has none.
+        // `explanation` is never written by the app; a fresh draft has none.
         const stored: QuizQuestion = { ...question };
         delete stored.explanation;
         return stored;

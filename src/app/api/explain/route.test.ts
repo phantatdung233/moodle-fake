@@ -30,10 +30,14 @@ async function callRoute(body: unknown, cookie?: string) {
   return { status: response.status, text: await response.text(), headers: response.headers };
 }
 
-async function signIn(studentId: string, attemptId: string): Promise<string> {
+/// The identity cookie; the Attempt id now travels in the request body.
+async function signIn(studentId: string): Promise<string> {
   const { createStudentSessionCookie } = await import("@/lib/student/session");
   return (
-    await createStudentSessionCookie({ studentId, attemptId }, process.env.SESSION_SECRET)
+    await createStudentSessionCookie(
+      { studentId, studentName: "Sinh vi00ean Test" },
+      process.env.SESSION_SECRET,
+    )
   ).value;
 }
 
@@ -78,16 +82,17 @@ describe("POST /api/explain", () => {
     studentCookie.value = undefined;
     // Same shape as an unconfigured deploy: the variable exists but is empty.
     // Deleting it outright would also wipe SESSION_SECRET's setup-env run order.
-    originalKey ??= process.env.GEMINI_API_KEY;
-    process.env.GEMINI_API_KEY = "";
+    originalKey ??= process.env.RIVER_API_KEY;
+    process.env.RIVER_API_KEY = "";
   });
   afterAll(() => {
-    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
-    else process.env.GEMINI_API_KEY = originalKey;
+    if (originalKey === undefined) delete process.env.RIVER_API_KEY;
+    else process.env.RIVER_API_KEY = originalKey;
   });
 
   it("không có cookie sinh viên → frame lỗi mềm, không phải 500", async () => {
-    const { status, text } = await callRoute({ questionId: "Q144" });
+    // A body that would otherwise pass: identity is checked first, so 401.
+    const { status, text } = await callRoute({ attemptId: "6a1b2c3d4e5f60718293a4b5", questionId: "Q144" });
 
     expect(status).toBe(401);
     expect(text).toContain("data:");
@@ -96,8 +101,8 @@ describe("POST /api/explain", () => {
   });
 
   it("body hỏng → 400 với frame lỗi tiếng Việt", async () => {
-    const attempt = await startAttempt("B3000001");
-    const cookie = await signIn("B3000001", attempt.id);
+    await startAttempt("B3000001");
+    const cookie = await signIn("B3000001");
 
     const { status, text } = await callRoute({}, cookie);
 
@@ -107,32 +112,32 @@ describe("POST /api/explain", () => {
 
   it("câu không có trong bài → 404 mềm", async () => {
     const attempt = await startAttempt("B3000002");
-    const cookie = await signIn("B3000002", attempt.id);
+    const cookie = await signIn("B3000002");
 
-    const { status, text } = await callRoute({ questionId: "Q999" }, cookie);
+    const { status, text } = await callRoute({ attemptId: attempt.id, questionId: "Q999" }, cookie);
 
     expect(status).toBe(404);
     expect(text).toContain("Không tìm thấy câu hỏi");
   });
 
-  it("không có GEMINI_API_KEY → stream vẫn 200 với frame 'Chưa cấu hình Gemini' và frame kết thúc", async () => {
+  it("không có RIVER_API_KEY → stream vẫn 200 với frame 'Chưa cấu hình API giải thích' và frame kết thúc", async () => {
     const attempt = await startAttempt("B3000003");
-    const cookie = await signIn("B3000003", attempt.id);
+    const cookie = await signIn("B3000003");
 
-    const { status, text, headers } = await callRoute({ questionId: "Q144" }, cookie);
+    const { status, text, headers } = await callRoute({ attemptId: attempt.id, questionId: "Q144" }, cookie);
 
     expect(status).toBe(200);
     expect(headers.get("content-type")).toContain("text/event-stream");
     expect(headers.get("x-explain-status")).toBe("soft-error");
-    expect(text).toContain('"error":"Chưa cấu hình Gemini"');
+    expect(text).toContain('"error":"Chưa cấu hình API giải thích"');
     expect(text.trimEnd().endsWith('data: {"done":true}')).toBe(true);
   });
 
   it("hash cũ (trang đã stale) → 409 để panel nhắc tải lại", async () => {
     const attempt = await startAttempt("B3000004");
-    const cookie = await signIn("B3000004", attempt.id);
+    const cookie = await signIn("B3000004");
 
-    const { status, text } = await callRoute({ questionId: "Q144", questionHash: "hash-cu" }, cookie);
+    const { status, text } = await callRoute({ attemptId: attempt.id, questionId: "Q144", questionHash: "hash-cu" }, cookie);
 
     expect(status).toBe(409);
     expect(text).toContain("Tải lại trang");
@@ -140,30 +145,26 @@ describe("POST /api/explain", () => {
 
   it("cookie của sinh viên khác không đọc được giải thích của Attempt này", async () => {
     const attempt = await startAttempt("B3000005");
-    const cookie = await signIn("B8888888", attempt.id);
+    const cookie = await signIn("B8888888");
 
-    const { status } = await callRoute({ questionId: "Q144" }, cookie);
+    const { status } = await callRoute({ attemptId: attempt.id, questionId: "Q144" }, cookie);
 
     expect(status).toBe(404);
   });
 
-  it("cache có sẵn → trả nguyên văn giải thích, không cần key", async () => {
+  it("không lưu giải thích: hỏi lại vẫn đi tới model chứ không trả văn bản cũ", async () => {
     const attempt = await startAttempt("B3000006");
-    const cookie = await signIn("B3000006", attempt.id);
-    const { saveExplanation } = await import("@/lib/gemini/cache");
+    const cookie = await signIn("B3000006");
     const q144 = attempt.questionsSnapshot.find((question) => question.id === "Q144");
     if (!q144) throw new Error("thiếu Q144");
-    await saveExplanation({
-      questionHash: q144.hash,
-      questionId: "Q144",
-      text: "Đáp án ghi nhận trong đề sai kiến thức: Numpy là thư viện tính toán khoa học.",
-    });
 
-    const { status, text, headers } = await callRoute({ questionId: "Q144", questionHash: q144.hash }, cookie);
+    const first = await callRoute({ attemptId: attempt.id, questionId: "Q144", questionHash: q144.hash }, cookie);
+    const second = await callRoute({ attemptId: attempt.id, questionId: "Q144", questionHash: q144.hash }, cookie);
 
-    expect(status).toBe(200);
-    expect(headers.get("x-explain-status")).toBeNull();
-    expect(text).toContain("Đáp án ghi nhận trong đề sai kiến thức");
-    expect(text).toContain('"done":true');
+    // Without a key every call reports "Chưa cấu hình API giải thích": had the first
+    // answer been stored, the second would have returned that text instead.
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.text).toContain("Chưa cấu hình API giải thích");
   });
 });

@@ -13,10 +13,9 @@ lỗi parse), danh sách đề ở `/admin`, **parser thuần** biến file Mood
 nhập MSSV + họ tên, mỗi màn một câu, tự lưu, xem đáp án tức thì, **vòng đời
 đề + chế độ thi**: sửa đề nháp, publish (chốt đề), huỷ publish, lưu trữ, thi có
 đồng hồ đếm ngược, nộp bài và trang tổng kết (`/q/<slug>/ket-qua`), và **giải
-thích Gemini streaming** sau mỗi câu (`POST /api/explain`, cache theo
-`Question.hash`), **duyệt đáp án** ở `/admin/quizzes/<id>/review` (chỉ hiện lại
-giải thích đã cache; nút **Giải thích bằng AI** mới gọi model lần nữa, qua
-`POST /api/admin/explain`), và **quản trị kết quả** (`/admin/results`): bảng mọi lượt làm
+thích AI streaming** sau mỗi câu (`POST /api/explain`, sinh mới theo đáp án của
+lượt làm), **duyệt đáp án** ở `/admin/quizzes/<id>/review` (nút **Giải thích
+bằng AI** gọi model, qua `POST /api/admin/explain`), và **quản trị kết quả** (`/admin/results`): bảng mọi lượt làm
 có lọc theo đề/MSSV, xuất CSV, reset lượt của một sinh viên trong một đề, và
 trang chi tiết từng câu **theo snapshot** của bài đã làm.
 
@@ -85,8 +84,9 @@ Tên database mặc định: `moodle_quiz`.
 | `MONGODB_URI` | Chuỗi kết nối MongoDB, vd `mongodb://127.0.0.1:27017/moodle_quiz`. Prod dùng Atlas. |
 | `ADMIN_PASSWORD` | Mật khẩu đăng nhập `/admin` (một tài khoản admin duy nhất). |
 | `SESSION_SECRET` | Bí mật HMAC ký cookie phiên admin **và** cookie danh tính sinh viên. Tạo bằng `openssl rand -hex 32`. |
-| `GEMINI_API_KEY` | Key Google Gemini cho phần giải thích. Để trống vẫn chạy: UI hiện “Chưa cấu hình Gemini”, chấm điểm không phụ thuộc Gemini. **Không** đặt `GOOGLE_API_KEY` song song — SDK ưu tiên biến đó và sẽ dùng nhầm key. |
-| `GEMINI_MODEL` | Model Gemini dùng để sinh giải thích. Mặc định `gemini-2.5-flash` khi để trống. |
+| `RIVER_API_KEY` | Key River AI cho phần giải thích. Để trống vẫn chạy: UI hiện “Chưa cấu hình API giải thích”, chấm điểm không phụ thuộc model. |
+| `EXPLAIN_MODEL` | Model dùng để sinh giải thích. Để trống → mặc định `deepseek-ai/DeepSeek-V4.1-Flash`. |
+| `EXPLAIN_BASE_URL` | Base URL của endpoint chat-completions. Để trống → `https://api.river.ai/v1`. |
 
 Next.js đọc `.env.local`; `pnpm seed` đọc `.env.local` rồi `.env`.
 
@@ -94,17 +94,33 @@ Next.js đọc `.env.local`; `pnpm seed` đọc `.env.local` rồi `.env`.
 
 ```bash
 pnpm dev        # http://localhost:3000, quản trị tại /admin
-pnpm seed       # đọc moodle_quiz_merged.json, chạy parser và tạo một đề nháp "Python cơ bản"
+pnpm seed       # nạp mọi đề trong res/ và publish luôn
 pnpm test       # Vitest (node), dùng mongodb-memory-server
 pnpm lint       # ESLint
 pnpm build      # production build
 ```
 
-`pnpm seed` đọc file Moodle, chạy `parseQuizJson`, in tóm tắt (180 câu — 161
-`multichoice`, 19 `multianswer`; 100 câu `needs_review`, 10 câu có ô trống chưa
-có đáp án, 88 lỗi parse) rồi tạo một đề **nháp** qua cùng lớp dữ liệu với upload.
-Chạy lại khi slug `python-co-ban` đã tồn tại thì seed dùng `python-co-ban-2`,
-`-3`…, không ghi đè đề cũ.
+`pnpm seed` đọc **từng** file `res/moodle_quiz_de_<n>.json`, chạy `parseQuizJson`
+và tạo đề `Python — Đề <n>` tại `/q/python-de-<n>`, mở dạng luyện tập rồi publish
+ngay (câu nào bị đánh dấu `needs_review` sẽ tự tắt). Chạy lại khi slug đã tồn tại
+thì seed dùng hậu tố `-2`, `-3`…, không ghi đè đề cũ.
+
+`pnpm seed --reset` xoá **toàn bộ** đề, bài làm và giải thích đã lưu trước khi nạp
+lại — dùng khi muốn lấy đúng bộ đề trong `res/` và bắt đầu lại từ đầu.
+
+## Giao diện
+
+Toàn bộ giao diện theo **Minimalism & Swiss Style**: đen/trắng/xám, đường kẻ
+mảnh, góc gần vuông, không đổ bóng, một font grotesque (Inter) cho cả tiêu đề và
+nội dung, Geist Mono cho mã. Mọi màu, bo góc, cỡ chữ và trạng thái tương tác đến
+từ token trong `src/app/globals.css`; component không dùng màu palette trực tiếp
+(`emerald-600`, `amber-50`…). Trạng thái đúng/sai/cảnh báo có token riêng
+(`--success-*`, `--destructive-*`, `--warning-*`) và luôn kèm icon/nhãn, không
+chỉ dựa vào màu.
+
+Chế độ tối có thật: nút đổi giao diện (`ThemeToggle`) lưu lựa chọn vào
+`localStorage`, script inline trong `layout.tsx` áp `.dark` trước lần vẽ đầu để
+không chớp trắng. Mặc định là giao diện sáng.
 
 ## Upload đề và danh sách đề (`/admin`)
 
@@ -134,7 +150,7 @@ Chạy lại khi slug `python-co-ban` đã tồn tại thì seed dùng `python-c
 - `Question` là `needs_review` khi không có đáp án dùng được (multichoice không
   có `selected: true`, multianswer có ô trống) hoặc nằm trong danh sách ID đáp
   án rác đã biết (Q143, Q179) — parser **không tự bịa đáp án**.
-- `hash` = SHA-256 của nội dung + đáp án, dùng làm cache key của giải thích Gemini.
+- `hash` = SHA-256 của nội dung + đáp án, dùng để nhận ra cùng một câu giữa các lần upload.
 - Một câu hỏng thành một entry trong `errors[]` (`{ questionId, reason }`, lý do
   tiếng Việt); top-level không phải mảng thì ném `TypeError` tiếng Việt.
 
@@ -285,8 +301,8 @@ draft ──publish──▶ published ──archive──▶ archived (trạng 
   không được lệch với snapshot của sinh viên.
 - **Lưu trữ** chỉ từ `published`, là trạng thái cuối: đề biến khỏi `/`, không sửa
   được nữa, nhưng kết quả cũ vẫn xem được qua `/q/<slug>/ket-qua`.
-- **Xoá đề nháp** chỉ có ở trang đề `draft`: hộp thoại xác nhận rồi xoá hẳn đề
-  cùng giải thích AI đã sinh *của đề đó* (`ExplanationCache` theo hash). Server
+- **Xoá đề nháp** chỉ có ở trang đề `draft`: hộp thoại xác nhận rồi xoá hẳn đề.
+  Server
   kiểm tra lại trạng thái trong chính câu lệnh xoá, nên đề vừa publish ở tab khác
   bị từ chối: “Chỉ xoá được đề nháp. Đề đã publish hoặc đã lưu trữ phải giữ lại để
   lượt làm cũ còn đọc được.”
@@ -300,7 +316,7 @@ draft ──publish──▶ published ──archive──▶ archived (trạng 
 - `updateQuizSettings(quizId, { title, slug, mode, timeLimit, maxAttempts })`.
 - `saveQuestionSelection(quizId, { questionId, enabled })`.
 - `deleteDraftQuiz(quizId)` — xoá đề `draft` (từ chối mọi trạng thái khác bằng
-  `DELETE_NOT_DRAFT_ERROR`) và các `ExplanationCache` mà chỉ đề đó dùng.
+  `DELETE_NOT_DRAFT_ERROR`).
 - Hằng số lỗi: `NOT_DRAFT_ERROR`, `NOT_PUBLISHED_ERROR`, `NOT_ARCHIVED_ERROR`,
   `ARCHIVED_TERMINAL_ERROR`, `NO_READY_QUESTIONS_ERROR`,
   `UNPUBLISH_HAS_ATTEMPTS_ERROR`, `DELETE_NOT_DRAFT_ERROR`, `TIME_LIMIT_ERROR`,
@@ -321,12 +337,13 @@ câu dùng **cùng renderer** với sinh viên (`QuestionContent`), nên placeho
 `[[n]]` nằm đúng vị trí trong chữ và trong code; ở đây ô trống là nhãn chỉ đọc.
 Mọi ghi đều kiểm tra lại `status: draft` ở server.
 
-## Giải thích bằng Gemini (`src/lib/gemini/`, `/api/explain`)
+## Giải thích bằng AI (`src/lib/gemini/`, `/api/explain`)
 
 Sau khi câu được chấm (chế độ luyện tập: bấm **Xem đáp án**; chế độ thi: ngay khi
-nộp, trong phần review từng câu ở `/q/<slug>/ket-qua`) một panel **“Giải thích
-bằng AI”** hiện dưới phần phản hồi và chữ chạy dần. Đúng/sai và
-đáp án **không bao giờ** đến từ Gemini — đó là kết quả của `gradeAnswer`; Gemini
+nộp, trong phần review từng câu ở `/q/<slug>/ket-qua`) đáp án hiện ra ngay. Dưới
+phần phản hồi có khung **“Giải thích bằng AI”** với nút bấm: chỉ khi sinh viên
+tự bấm thì chữ mới chạy dần — xem đáp án không tốn lời gọi model. Đúng/sai và
+đáp án **không bao giờ** đến từ model — đó là kết quả của `gradeAnswer`; model
 chỉ viết lời giải thích (tiếng Việt, ngắn), và được yêu cầu **nói thẳng** nếu
 đáp án ghi nhận trong đề sai kiến thức (Q144, Q153, Q156, Q165…).
 
@@ -335,38 +352,39 @@ chỉ viết lời giải thích (tiếng Việt, ngắn), và được yêu c�
   đáp án ghi nhận, câu trả lời của sinh viên; với `multianswer` liệt kê **mọi ô**
   cùng đáp án mong đợi và điều sinh viên gõ; kèm yêu cầu tiếng Việt/ngắn gọn.
 - `explainQuestion({ question, studentAnswer, client?, apiKey? })` →
-  `{ ok, source: "cache" | "generated", stream } | { ok: false, error, stream }`.
-  `stream` phát từng `{ text }` rồi `{ error }` nếu model hỏng giữa dòng. Ghi
-  `ExplanationCache` khi stream xong; lỗi/trống thì **không** cache để lần sau
-  sinh lại. Truyền `client` (`ExplainClient = { stream(prompt): AsyncIterable<string> }`)
-  để test bằng fake model và đếm số lần gọi.
-- `getCachedExplanation(hash)` → `string | null` — **cửa đọc duy nhất** của
-  giải thích đã lưu (trang tổng kết, chi tiết lượt của admin, trang duyệt đáp án).
-  Cache hỏng/mất kết nối đọc thành “chưa có”, không làm hỏng màn làm bài.
-- Ghi giải thích: `ExplanationCache` upsert theo hash, **và** write-through vào
-  `Question.explanation` của mọi đề `draft`/`published` còn mang hash đó — giảng
-  viên thấy ngay lời giải thích trong chính document của đề.
-- `EXPLANATION.notConfigured` (“Chưa cấu hình Gemini”),
-  `EXPLANATION.unavailable` (“Chưa cấu hình hoặc không dùng được Gemini”, lỗi tạm
-  thời) và `EXPLANATION.modelUnavailable` (“Gemini không dùng được với cấu hình
-  hiện tại — kiểm tra GEMINI_API_KEY hoặc đổi GEMINI_MODEL”, lỗi key/quyền/model)
-  nằm ở `messages.ts` — file an toàn cho client, không kéo SDK vào bundle trình
-  duyệt. `explanationErrorFor(error)` phân loại lỗi SDK thành hai thông báo sau.
-- Model: `GEMINI_MODEL` (mặc định `gemini-2.5-flash`, `thinkingBudget: 0`). Nếu
-  project Google chưa được cấp quyền 2.5 chỉ cần đổi biến này, không sửa code.
+  `{ ok, source: "generated", stream } | { ok: false, error, stream }`.
+  `stream` phát từng `{ text }` rồi `{ error }` nếu model hỏng giữa dòng.
+  **Không cache**: mỗi sinh viên có thể chọn đáp án khác nhau nên mỗi lượt hỏi
+  đều gọi model theo đúng đáp án của lượt đó. Truyền `client`
+  (`ExplainClient = { stream(prompt): AsyncIterable<string> }`) để test bằng fake
+  model và đếm số lần gọi.
+- `EXPLANATION.notConfigured` (“Chưa cấu hình API giải thích”),
+  `EXPLANATION.unavailable` (“Chưa cấu hình hoặc không dùng được API giải thích”,
+  lỗi tạm thời), `EXPLANATION.modelBusy` (“Model đang quá tải hoặc không phản hồi
+  kịp — đợi một lát rồi bấm Thử lại”, gặp 429/503 hoặc quá thời gian chờ) và
+  `EXPLANATION.modelUnavailable` (“Model không dùng được với cấu hình hiện tại —
+  kiểm tra RIVER_API_KEY hoặc đổi EXPLAIN_MODEL”, lỗi key/quyền/model)
+  nằm ở `messages.ts` — file an toàn cho client, không kéo mã phía server vào
+  bundle trình duyệt. `explanationErrorFor(error)` phân loại lỗi HTTP thành ba
+  thông báo trên.
+- Nhà cung cấp: River AI, endpoint OpenAI-compatible
+  `POST {EXPLAIN_BASE_URL}/chat/completions` với body
+  `{ model, messages, max_tokens, temperature, stream: true }`; câu trả lời là
+  SSE, mỗi frame `data: {"choices":[{"delta":{"content":"…"}}]}`.
+  Model: `EXPLAIN_MODEL` (mặc định `deepseek-ai/DeepSeek-V4.1-Flash`), base URL:
+  `EXPLAIN_BASE_URL` (mặc định `https://api.river.ai/v1`). Đổi model hoặc nhà
+  cung cấp chỉ cần sửa env, không sửa code.
+- Timeout `STREAM_TIMEOUT_MS` (45s, tính từ lần nhận token cuối): model quá tải
+  có thể trả 503 rồi im lặng mãi — không có timeout thì panel quay vô hạn.
+  Hết thời gian → `modelBusy` + nút Thử lại.
+- Request gửi `{ model, messages, max_tokens, temperature, stream: true }`;
+  `textFromChunk` đọc từng frame SSE và bỏ qua `[DONE]`/comment giữ kết nối.
 
-**Cache** (`ExplanationCache`: `questionHash` unique, `questionId`, `text`,
-`createdAt`): khoá là `Question.hash` (SHA-256 của nội dung + đáp án). Sinh viên
-thứ hai xem cùng câu → nhận cache, không gọi model. Giảng viên sửa đáp án →
-hash đổi → giải thích mới; `Attempt` cũ vẫn mang hash cũ nên đọc đúng bản cũ.
-
-**Trang tổng kết và bài đang làm**: giải thích đã cache được đọc **ở server**
-(`explanationsByHash` trong `AttemptView`) nên hiện ngay, không cần bấm gì và
-không gọi model; câu chưa có cache vẫn giữ nút **Giải thích bằng AI**.
+**Trang tổng kết và bài đang làm**: mỗi câu có panel **Giải thích bằng AI**,
+chỉ gọi model khi sinh viên bấm; không có bản lưu sẵn để hiện ngay.
 
 **Duyệt đáp án** (`/admin/quizzes/<id>/review`): mỗi câu có khối **Giải thích
-bằng AI** — hiện giải thích đã cache kèm dấu “đã có sẵn”, và nút **Sinh lại giải
-thích** chỉ gọi model khi giảng viên bấm. Không có suy luận tự động kiểu “đáp án
+bằng AI**, chỉ gọi model khi giảng viên bấm. Không có suy luận tự động kiểu “đáp án
 này trông sai”: hệ thống không bao giờ tự gắn cờ một câu. Route
 `POST /api/admin/explain` (body `{ quizId, questionId }`) kiểm tra phiên admin,
 đọc câu từ đề đó, và stream đúng hợp đồng frame như `/api/explain` (`401` thiếu
@@ -433,13 +451,12 @@ Xác nhận sẽ **xoá mọi `Attempt` của đúng sinh viên đó trong đún
 
 Mở bằng **Chi tiết** ở bảng kết quả: hiện điểm, trạng thái, thời điểm, và **từng
 câu** của bài đó — nội dung câu, đáp án sinh viên đã chọn/gõ, đáp án đúng, từng
-ô trống đúng/sai với đáp án mong đợi, điểm từng câu, và **giải thích đã lưu**.
+ô trống đúng/sai với đáp án mong đợi và điểm từng câu.
 
 - Đọc **`questionsSnapshot` của `Attempt`**, không đọc bản đề hiện tại — giảng
   viên giải thích đúng bản đề sinh viên đã làm (user stories 71–72).
-- Giải thích lấy từ cache theo `Question.hash` (`getCachedExplanation`) — trang
-  **không gọi Gemini**; câu chưa từng được giải thích hiện “Chưa có giải thích
-  cho câu này.”.
+- Không lưu giải thích AI: chi tiết lượt làm không gọi model và hiện “Chưa có
+  giải thích cho câu này.”.
 - Bài đang làm dở: chưa có điểm, chỉ hiện câu trả lời đã lưu.
 
 ## Kiểm thử
@@ -468,14 +485,14 @@ Test của ticket này:
 - `src/lib/admin/result-format.test.ts` — nhãn trạng thái, `33,3%`, `dd/MM/yyyy`.
 - `src/lib/admin/with-admin.test.ts` — action admin thiếu phiên trả lỗi tiếng Việt.
 - `src/app/api/admin/explain/route.test.ts` — route “Giải thích bằng AI” với
-  **fake Gemini client** (`useTestGeminiClient`, chỉ có tác dụng khi
-  `NODE_ENV=test`): `401` thiếu phiên, `404` câu không có, sinh rồi cache, lỗi mô
-  hình ra thông báo tiếng Việt.
+  **fake AI client** (`useTestExplainClient`, chỉ có tác dụng khi
+  `NODE_ENV=test`): `401` thiếu phiên, `404` câu không có, lỗi model ra thông
+  báo tiếng Việt.
 - `src/app/admin/quizzes/[id]/review/page.test.tsx` +
-  `admin-explanation.test.tsx` — giải thích đã cache được truyền sẵn vào cây
-  props, nút chỉ hiện văn bản khi bấm.
+  `admin-explanation.test.tsx` — khối giải thích luôn mở trống, chỉ hiện văn bản
+  sau khi bấm.
 - `src/lib/quiz/lifecycle-repository.delete.test.ts` — xoá đề nháp, từ chối đề đã
-  publish, không xoá giải thích của đề khác.
+  publish.
 
 ### Smoke test thật (đã chạy)
 
@@ -508,8 +525,8 @@ bước đã chạy:
 2. `MONGODB_URI` dạng `mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/moodle_quiz`
    — nhớ tên database ở cuối URI.
 3. Trên Vercel đặt `MONGODB_URI`, `ADMIN_PASSWORD`, `SESSION_SECRET`
-   (`openssl rand -hex 32`), `GEMINI_API_KEY` (để trống nếu chưa muốn AI) và
-   `GEMINI_MODEL` (tuỳ chọn). **Không** commit `.env.local`.
+   (`openssl rand -hex 32`), `RIVER_API_KEY` (để trống nếu chưa muốn AI),
+   `EXPLAIN_MODEL` và `EXPLAIN_BASE_URL` (tuỳ chọn). **Không** commit `.env.local`.
 4. Deploy, mở `/admin/login`, upload đề → duyệt → publish.
 5. Cookie đặt `Secure` tự động khi `NODE_ENV=production` (Vercel luôn production),
    nên phải dùng HTTPS — bản địa phương chạy `http://localhost:3000` vẫn OK.
@@ -540,7 +557,7 @@ src/lib/admin/           mật khẩu admin, session cookie, server actions logi
 src/lib/quiz/            model Quiz + Attempt, parser Moodle, grading, repository,
                          lifecycle-repository, attempt-repository,
                          content/splitPlaceholders, markdown, slug
-src/lib/gemini/          prompt thuần, ExplainClient + SDK Gemini, ExplanationCache,
+src/lib/gemini/          prompt thuần, ExplainClient + River AI client,
                          explainQuestion, đọc frame SSE, messages (dùng cho client)
 src/app/api/explain/     route handler streaming giải thích
 src/app/admin/results/   bảng kết quả, trang chi tiết lượt, route export CSV, nút reset

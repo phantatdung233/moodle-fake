@@ -141,8 +141,40 @@ describe("listResults", () => {
     expect((await listResults({ limit: 10 })).truncated).toBe(false);
   });
 
-  it("đưa ra danh sách đề để chọn bộ lọc", async () => {
-    await seedPublishedQuiz("de-khac", "Đề khác");
+  it("phân trang bằng cursor: không trùng, không sót dòng, số lượt vẫn đúng", async () => {
+    for (const studentId of ["B1", "B2", "B3", "B4", "B5"]) {
+      await takeAttempt(quizId, studentId, studentId);
+    }
+
+    const first = await listResults({ limit: 2 });
+    expect(studentIds(first.rows)).toEqual(["B5", "B4"]);
+    expect(first.hasNext).toBe(true);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = await listResults({ limit: 2, cursor: first.nextCursor ?? undefined });
+    const third = await listResults({ limit: 2, cursor: second.nextCursor ?? undefined });
+
+    // Each row appears exactly once, newest first.
+    expect(studentIds(second.rows)).toEqual(["B3", "B2"]);
+    expect(studentIds(third.rows)).toEqual(["B1"]);
+    expect(third.hasNext).toBe(false);
+    expect(third.nextCursor).toBeNull();
+    // The total and the per-student numbering ignore paging.
+    expect(third.totalRows).toBe(5);
+    expect([...first.rows, ...second.rows, ...third.rows].map((row) => row.attemptNumber)).toEqual(
+      [1, 1, 1, 1, 1],
+    );
+  });
+
+  it("cursor hỏng thì quay về trang đầu thay vì lỗi", async () => {
+    await takeAttempt(quizId, "B1", "An");
+
+    const page = await listResults({ cursor: "không-phải-cursor" });
+
+    expect(studentIds(page.rows)).toEqual(["B1"]);
+  });
+
+  it("đưa ra danh sách đề để chọn bộ lọc", async () => {    await seedPublishedQuiz("de-khac", "Đề khác");
 
     const page = await listResults({});
 

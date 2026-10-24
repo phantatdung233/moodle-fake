@@ -1,13 +1,16 @@
+import { adminShell } from "@/lib/admin/shell";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import {
   getQuestionForReview,
   getQuizForReview,
   type AnswerReviewQuiz,
 } from "@/lib/quiz/review-repository";
-import { getCachedExplanation } from "@/lib/gemini/cache";
-import { Button } from "@/components/ui/button";
+import type { QuizQuestion } from "@/lib/quiz/quiz.model";
+import { prepareQuestionContent } from "@/components/quiz/question-blocks";
+import { AdminDatabaseError, AdminHeader } from "@/app/admin/admin-header";
 import { ReviewQuestion, type ReviewPageMode } from "./review-question";
 
 export const metadata: Metadata = {
@@ -45,10 +48,9 @@ export default async function ReviewPage({ params, searchParams }: Props) {
     quiz = await getQuizForReview(id);
   } catch {
     return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-8">
-        <p className="text-sm text-destructive">
-          Không kết nối được cơ sở dữ liệu. Kiểm tra MONGODB_URI và mongod.
-        </p>
+      <main className={adminShell}>
+        <AdminHeader active="quizzes" />
+        <AdminDatabaseError />
       </main>
     );
   }
@@ -73,9 +75,23 @@ export default async function ReviewPage({ params, searchParams }: Props) {
       ? ((await getQuestionForReview(quiz.id, queue[0] ?? "")) ?? null)
       : question;
 
-  // Cached Gemini text, read on the server so the admin sees it immediately and
-  // only an explicit "Giải thích bằng AI" wakes the model.
-  const cachedExplanation = shownQuestion ? await getCachedExplanation(shownQuestion.hash) : null;
+  // Every Question this page can show (both tabs), parsed and highlighted on
+  // the server: the form below is a client component, which cannot await shiki.
+  // Each Question is read once, even when it is also the one on screen.
+  const byId = new Map<string, QuizQuestion | null>(
+    shownQuestion ? [[shownQuestion.id, shownQuestion]] : [],
+  );
+  const bodies = await Promise.all(
+    [...new Set([...quiz.reviewQueue, ...quiz.readyQuestionIds])].map(async (questionId) => {
+      if (!byId.has(questionId)) byId.set(questionId, await getQuestionForReview(quiz.id, questionId));
+      const candidate = byId.get(questionId);
+      return [
+        questionId,
+        candidate ? await prepareQuestionContent(candidate.content, candidate.blanks.length) : [],
+      ] as const;
+    }),
+  );
+  const questionBodies = Object.fromEntries(bodies);
 
   const readOnly = quiz.status !== "draft";
   const positionInQueue =
@@ -84,14 +100,20 @@ export default async function ReviewPage({ params, searchParams }: Props) {
       : null;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8">
-      <nav className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <Link href="/admin" className="text-muted-foreground hover:underline">
-          ← Danh sách đề
+    <main className={adminShell}>
+      <AdminHeader active="quizzes" />
+
+      <nav aria-label="Đường dẫn" className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <Link
+          href="/admin"
+          className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft aria-hidden className="size-3.5" />
+          Đề thi
         </Link>
         <Link
           href={`/admin/quizzes/${quiz.id}`}
-          className="text-muted-foreground hover:underline"
+          className="text-muted-foreground transition-colors hover:text-foreground"
         >
           Chi tiết đề
         </Link>
@@ -105,7 +127,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
           </p>
         </div>
         {positionInQueue ? (
-          <span className="rounded-full border px-3 py-1 text-xs">
+          <span className="rounded-sm border px-3 py-1 text-xs">
             Câu {positionInQueue}/{queue.length} trong danh sách
           </span>
         ) : null}
@@ -118,7 +140,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
         totalCount={quiz.totalCount}
         answeredCount={quiz.answeredCount}
         readyQueue={quiz.readyQuestionIds}
-        cachedExplanation={cachedExplanation}
+        questionBodies={questionBodies}
         reviewPath={reviewPath}
         recheckPath={recheckPath}
         done={{
@@ -126,14 +148,9 @@ export default async function ReviewPage({ params, searchParams }: Props) {
           reviewPath,
           readyCount: quiz.answeredCount,
           remaining: quiz.reviewQueue.length,
+          quizStatus: quiz.status,
         }}
       />
-
-      <div className="mt-6">
-        <Button asChild variant="outline">
-          <Link href={`/admin/quizzes/${quiz.id}`}>Về trang đề</Link>
-        </Button>
-      </div>
     </main>
   );
 }

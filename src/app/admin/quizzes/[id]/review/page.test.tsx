@@ -1,7 +1,7 @@
 /**
  * Page seam: `/admin/quizzes/[id]/review` as the giảng viên receives it. The
  * Question text, the answer form, and story 21's explanation block: the cached
- * text arrives pre-rendered, the button is the only thing that wakes Gemini.
+ * text arrives pre-rendered, the button is the only thing that wakes the model.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -12,7 +12,6 @@ import { clearTestDatabase, startTestDatabase, stopTestDatabase } from "@/test/m
 import { parseQuizJson } from "@/lib/quiz/parser";
 import { createDraftQuizFromQuestions } from "@/lib/quiz/repository";
 import { getQuizForReview } from "@/lib/quiz/review-repository";
-import { saveExplanation } from "@/lib/gemini/cache";
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: () => undefined, set: vi.fn(), delete: vi.fn() }),
@@ -102,39 +101,21 @@ describe("/admin/quizzes/[id]/review", () => {
     return { id, hash: question.hash };
   }
 
-  it("câu chưa có giải thích: nút 'Giải thích bằng AI', không tự gọi model", async () => {
+  it("không truyền sẵn giải thích nào: mỗi câu được sinh lại khi admin bấm", async () => {
     const review = findClient(await tree(quizId), "ReviewQuestion");
 
-    expect(review?.cachedExplanation).toBeNull();
+    expect(review?.cachedExplanation).toBeUndefined();
   });
 
-  it("đã có giải thích trong cache: hiện ngay văn bản và dấu 'đã có sẵn'", async () => {
-    const { id, hash } = await firstQuestion();
-    await saveExplanation({
-      questionHash: hash,
-      questionId: id,
-      text: "Đáp án ghi nhận là sort(); các lựa chọn khác không phải hàm của Numpy.",
-    });
-
-    const review = findClient(await tree(quizId), "ReviewQuestion");
-
-    expect(review?.question).toMatchObject({ id });
-    expect(review?.cachedExplanation).toBe(
-      "Đáp án ghi nhận là sort(); các lựa chọn khác không phải hàm của Numpy.",
-    );
-  });
-
-  it("giải thích của câu khác không bị hiện nhầm", async () => {
-    const { id, hash } = await firstQuestion();
-    await saveExplanation({ questionHash: hash, questionId: id, text: "Giải thích của câu đầu." });
-
+  it("mở câu khác cũng không mang theo giải thích của câu trước", async () => {
+    const { id } = await firstQuestion();
     const quiz = await getQuizForReview(quizId);
     const other = quiz!.reviewQueue.find((candidate) => candidate !== id);
     if (!other) throw new Error("cần ít nhất hai câu cần duyệt");
     const review = findClient(await tree(quizId, other), "ReviewQuestion");
 
     expect(review?.question).toMatchObject({ id: other });
-    expect(review?.cachedExplanation).toBeNull();
+    expect(review?.cachedExplanation).toBeUndefined();
   });
 
   it("ReviewQuestion nhận quizId của đề đang duyệt, để nút gọi đúng đề", async () => {

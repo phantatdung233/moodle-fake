@@ -4,7 +4,7 @@
  *   publish v1 → sinh viên starts and answers → the giảng viên cannot edit the
  *   frozen Quiz → a newer version of the paper exists (a re-upload, or an edit
  *   after unpublish) → the old Attempt's review and the sinh viên's summary
- *   still show v1's Question text and v1's explanation.
+ *   still show v1's Question text.
  *
  * Reads go through `getAttemptDetail` (the giảng viên's page) and
  * `getSummaryForStudent` (the sinh viên's page), never through Mongoose, so the
@@ -26,7 +26,6 @@ import {
   submitAttempt,
 } from "@/lib/quiz/attempt-repository";
 import { withRecomputedHash } from "@/lib/quiz/question-hash";
-import { saveExplanation } from "@/lib/gemini/cache";
 import { listResults, getAttemptDetail } from "@/lib/admin/results-repository";
 import { clearTestDatabase, startTestDatabase, stopTestDatabase } from "@/test/mongo";
 
@@ -72,8 +71,6 @@ describe("snapshot integrity after a newer version exists", () => {
       (question) => question.id === "Q001",
     )!;
     const v1Text = v1Question.content;
-    const v1Explanation = "Bản v1: sort() là cú pháp đúng để sắp xếp mảng.";
-    await saveExplanation({ questionHash: v1Question.hash, questionId: "Q001", text: v1Explanation });
 
     // ── sinh viên làm trên v1 ─────────────────────────────────────────────────
     const started = await resumeOrStartAttempt({
@@ -121,11 +118,6 @@ describe("snapshot integrity after a newer version exists", () => {
         $inc: { version: 1 },
       },
     );
-    await saveExplanation({
-      questionHash: v2Question.hash,
-      questionId: "Q001",
-      text: "Bản v2: reverse=True sắp xếp giảm dần.",
-    });
 
     // ── bài đang làm dở của sinh viên vẫn là v1 ───────────────────────────────
     const midFlight = await getAttemptDetail(started.attempt.id);
@@ -142,11 +134,10 @@ describe("snapshot integrity after a newer version exists", () => {
     if (!submitted.ok) return;
     expect(submitted.result.total).toBe(100);
 
-    // ── trang chi tiết của giảng viên: nội dung + giải thích của v1 ───────────
+    // ── trang chi tiết của giảng viên: nội dung của v1 ────────────────────────
     const detail = await getAttemptDetail(started.attempt.id);
     expect(detail?.quizVersion).toBe(2); // the version the Attempt started on
     expect(detail?.questions[0].question.content).toBe(v1Text);
-    expect(detail?.questions[0].explanation).toBe(v1Explanation);
     expect(detail?.questions[0].graded).toEqual({ correct: true, score: 1 });
 
     // ── trang tổng kết của sinh viên: cũng là v1 ──────────────────────────────

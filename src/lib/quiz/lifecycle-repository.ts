@@ -121,18 +121,12 @@ export async function deleteDraftQuiz(quizId: string): Promise<LifecycleResult> 
 
   await ensureConnection();
 
-  const quiz = await Quiz.findOne({ _id: quizId }).select("status questions.id questions.hash").lean();
+  const quiz = await Quiz.findOne({ _id: quizId }).select("status").lean();
   if (!quiz) return { ok: false, error: QUIZ_NOT_FOUND_ERROR };
   if (quiz.status !== "draft") return { ok: false, error: DELETE_NOT_DRAFT_ERROR };
 
   const deleted = await Quiz.deleteOne({ _id: quizId, status: "draft" });
   if (deleted.deletedCount === 0) return { ok: false, error: DELETE_NOT_DRAFT_ERROR };
-
-  const hashes = (quiz.questions ?? []).map((question) => question.hash).filter(Boolean);
-  if (hashes.length > 0) {
-    const { ExplanationCache } = await import("@/lib/gemini/explanation.model");
-    await ExplanationCache.deleteMany({ questionHash: { $in: hashes } });
-  }
 
   return { ok: true };
 }

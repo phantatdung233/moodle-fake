@@ -1,8 +1,8 @@
 /**
  * `/api/admin/explain` — the route behind "Giải thích bằng AI" on the review
  * page. Same seam as the sinh viên route: a soft SSE error for every failure,
- * the cached text without waking the model, and the fake model injected through
- * `useTestGeminiClient` so nothing here touches the network.
+ * live model output only (nothing is cached), and the fake model injected through
+ * `useTestExplainClient` so nothing here touches the network.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -25,7 +25,7 @@ vi.mock("next/headers", () => ({
 }));
 
 const { POST } = await import("./route");
-const { useTestGeminiClient } = await import("@/lib/gemini/explain");
+const { useTestExplainClient } = await import("@/lib/gemini/explain");
 
 const MOODLE_FILE = path.resolve(process.cwd(), "moodle_quiz_merged.json");
 
@@ -90,7 +90,7 @@ describe("POST /api/admin/explain", () => {
 
   beforeAll(async () => {
     server = await startTestDatabase("moodle_quiz_admin_explain_route_test");
-    useTestGeminiClient(() => fakeClient());
+    useTestExplainClient(() => fakeClient());
   });
   afterAll(async () => {
     await stopTestDatabase(server);
@@ -103,12 +103,12 @@ describe("POST /api/admin/explain", () => {
     answer = () => "Đáp án ghi nhận cần xem lại: Numpy là thư viện tính toán.";
     // A configured deploy: the fake client replaces the SDK, the key only has
     // to be non-empty so `explainQuestion` reaches the client seam.
-    originalKey ??= process.env.GEMINI_API_KEY;
-    process.env.GEMINI_API_KEY = "test-key";
+    originalKey ??= process.env.RIVER_API_KEY;
+    process.env.RIVER_API_KEY = "test-key";
   });
   afterAll(() => {
-    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
-    else process.env.GEMINI_API_KEY = originalKey;
+    if (originalKey === undefined) delete process.env.RIVER_API_KEY;
+    else process.env.RIVER_API_KEY = originalKey;
   });
 
   it("không có phiên admin → frame lỗi mềm 401, không gọi model", async () => {
@@ -143,7 +143,7 @@ describe("POST /api/admin/explain", () => {
     expect(text).toContain("không hợp lệ");
   });
 
-  it("chưa có cache → sinh bằng model cho đúng câu đó, không kèm bài làm của sinh viên", async () => {
+  it("sinh bằng model cho đúng câu đó, không kèm bài làm của sinh viên", async () => {
     await signIn();
     const { quizId } = await draftQuiz();
     answer = () => "Numpy là thư viện tính toán khoa học.";
@@ -159,23 +159,18 @@ describe("POST /api/admin/explain", () => {
     expect(calls[0]).not.toContain("Sinh viên chọn");
   });
 
-  it("sinh xong thì lần sau trả bản cache, không gọi model lần nữa", async () => {
+  it("sinh xong không lưu lại: lần sau vẫn gọi model", async () => {
     await signIn();
-    const { quizId, hash } = await draftQuiz();
+    const { quizId } = await draftQuiz();
     await callRoute({ quizId, questionId: "Q001" });
-
-    const { getCachedExplanation } = await import("@/lib/gemini/cache");
-    expect(await getCachedExplanation(hash)).toBe(
-      "Đáp án ghi nhận cần xem lại: Numpy là thư viện tính toán.",
-    );
 
     const second = await callRoute({ quizId, questionId: "Q001" });
 
     expect(second.text).toContain("Đáp án ghi nhận cần xem lại");
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
   });
 
-  it("model không dùng được → stream 200 với frame lỗi mềm nhắc cấu hình Gemini", async () => {
+  it("model không dùng được → stream 200 với frame lỗi mềm nhắc cấu hình model", async () => {
     await signIn();
     const { quizId } = await draftQuiz();
     failure = '{"error":{"code":404,"message":"models/gemini-2.5-flash is not found"}}';
@@ -185,7 +180,7 @@ describe("POST /api/admin/explain", () => {
     // Same contract as the sinh viên route: failures after the first byte are
     // frames, so the panel renders the Vietnamese message instead of a 500.
     expect(status).toBe(200);
-    expect(text).toContain("GEMINI_MODEL");
+    expect(text).toContain("EXPLAIN_MODEL");
     expect(text).not.toMatch(/at .*route\.ts/);
   });
 });

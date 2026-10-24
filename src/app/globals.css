@@ -4,12 +4,50 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/**
+ * The question mini-map scrolls on its own. Its thumb is a thin, low-contrast
+ * rule that fades in on hover, and the track reserves its width, so the scroll
+ * bar never sits on top of the question numbers. Colours are tokens, so the
+ * dark theme gets the same treatment.
+ */
+@utility scroll-quiet {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+    transition: background-color 150ms;
+  }
+  &:hover::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+  }
+}
+
+/**
+ * A Python program framed like a small editor: rounded, clipped to its own
+ * scrollbox so a long line never breaks the page, on the light code sheet.
+ * Used by `CodeBlock`, so the runner and both review pages share it.
+ */
+@utility code-sheet {
+  overflow: hidden auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 0 oklch(0 0 0 / 0.04);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-heading);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,60 +86,123 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/**
+ * Paper + ink, lit by one brand hue. The student side leads with Python's
+ * yellow-blue energy toned down into a warm accent (`--brand`) and a cool
+ * tile wash (`--brand-cool`); the admin side stays quiet so the two never read
+ * as the same app. Surfaces sit on a tinted paper instead of flat white, so
+ * cards lift without decorative shadows. Semantic pairs that carry meaning —
+ * correct / wrong / warning / neutral — are tokens too, and every one has a
+ * dark counterpart.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* The font variables are declared on <html> by next/font (layout.tsx), which
+     is what Tailwind's preflight and every utility resolve against. */
+  /* Surfaces: page = paper, card = white, muted = a rule-visible tint. */
+  --background: oklch(0.985 0.004 95);
+  --foreground: oklch(0.18 0.012 70);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.18 0.012 70);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.18 0.012 70);
+  /* Primary is ink, not a brand hue: the brand shows up as accent washes so a
+     black button never competes with the yellow. */
+  --primary: oklch(0.205 0.012 70);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.962 0.008 95);
+  --secondary-foreground: oklch(0.205 0.012 70);
+  --muted: oklch(0.962 0.008 95);
+  /* 0.475 on 0.985 keeps secondary text above 4.5:1. */
+  --muted-foreground: oklch(0.5 0.012 75);
+  --accent: oklch(0.945 0.012 95);
+  --accent-foreground: oklch(0.205 0.012 70);
+  --destructive: oklch(0.546 0.208 27.3);
+  --destructive-foreground: oklch(1 0 0);
+  /* Rules are quiet (1.4:1); form-control boundaries meet the 3:1 non-text
+     requirement so an empty input is visible without relying on its label. */
+  --border: oklch(0.895 0.008 90);
+  --input: oklch(0.64 0.01 80);
+  --ring: oklch(0.205 0.012 70);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.955 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-border: oklch(0.895 0 0);
+  --sidebar-ring: oklch(0.205 0 0);
+
+  /* Feedback: correct (green-800 ink on green-50 wash → 7:1), wrong reuses
+     destructive, warning is amber-800 ink on amber-50. Wash and ink are
+     separate tokens so a state can use a solid border with either. */
+  --success: oklch(0.448 0.108 149.5);
+  --success-foreground: oklch(0.266 0.068 150.9);
+  --success-surface: oklch(0.979 0.021 152.4);
+  --success-border: oklch(0.508 0.117 150.4);
+  --destructive-surface: oklch(0.971 0.014 17.4);
+  --destructive-border: oklch(0.6 0.19 26.4);
+  --warning: oklch(0.555 0.135 62.6);
+  --warning-foreground: oklch(0.414 0.112 45.9);
+  --warning-surface: oklch(0.981 0.03 84.9);
+  --warning-border: oklch(0.666 0.157 58.3);
+
+  /* Code and question images stay on a light sheet in both themes: shiki emits
+     a fixed light background and photos are authored on white. */
+  --code-surface: oklch(1 0 0);
+  --code-foreground: oklch(0.205 0 0);
+
+  /* Brand: Python's yellow held back to a readable amber, plus the blue it is
+     always paired with. Ink on the yellow is near-black, never white. */
+  --brand: oklch(0.865 0.15 90);
+  --brand-foreground: oklch(0.26 0.06 75);
+  --brand-surface: oklch(0.977 0.042 92);
+  /* Ink for text *on* `--brand-surface`. `--brand-foreground` is the opposite
+     pair — ink on the solid yellow — so the two are not interchangeable. */
+  --brand-ink: oklch(0.32 0.07 74);
+  --brand-border: oklch(0.84 0.11 88);
+  --brand-cool: oklch(0.72 0.14 248);
+  --brand-cool-foreground: oklch(0.4 0.13 252);
+  --brand-cool-surface: oklch(0.966 0.022 250);
+
+  /* Softened corners and no decorative shadow. Shadcn primitives derive
+     sm/md/lg/xl from --radius. */
+  --radius: 0.375rem;
+  --shadow-elevation: none;
+
+  /* 15px body, 13px small — denser than the default 16px for a study tool. */
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --tracking-tight: -0.011em;
+  --tracking-normal: 0em;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.165 0.01 265);
+  --foreground: oklch(0.975 0.004 95);
+  --card: oklch(0.215 0.014 265);
+  --card-foreground: oklch(0.975 0.004 95);
+  --popover: oklch(0.215 0.014 265);
+  --popover-foreground: oklch(0.975 0.004 95);
+  /* Inverted ink: white control on black paper. */
+  --primary: oklch(0.935 0.004 95);
+  --primary-foreground: oklch(0.205 0.012 70);
+  --secondary: oklch(0.28 0.016 265);
+  --secondary-foreground: oklch(0.975 0.004 95);
+  --muted: oklch(0.28 0.016 265);
+  --muted-foreground: oklch(0.735 0.012 260);
+  --accent: oklch(0.28 0.016 265);
+  --accent-foreground: oklch(0.975 0.004 95);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --destructive-foreground: oklch(0.165 0.01 265);
+  --border: oklch(1 0 0 / 14%);
+  --input: oklch(1 0 0 / 42%);
+  --ring: oklch(0.87 0.004 95);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -109,22 +210,111 @@
   --chart-5: oklch(0.269 0 0);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.87 0 0);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* Dark feedback uses a tinted surface + light ink: the light-mode pair would
+     drop to ~2:1 here. Washes stay low-chroma so text keeps contrast. */
+  --success: oklch(0.792 0.147 150.4);
+  --success-foreground: oklch(0.925 0.06 152.4);
+  --success-surface: oklch(0.28 0.05 152);
+  --success-border: oklch(0.56 0.13 151);
+  --destructive-surface: oklch(0.28 0.06 20);
+  --destructive-border: oklch(0.62 0.17 22);
+  --warning: oklch(0.82 0.14 79);
+  --warning-foreground: oklch(0.93 0.07 87);
+  --warning-surface: oklch(0.3 0.055 70);
+  --warning-border: oklch(0.66 0.13 72);
+
+  /* Yellow stays the brand, but on dark paper it becomes a low-chroma wash so
+     text on it still clears 4.5:1. */
+  --brand: oklch(0.84 0.15 90);
+  --brand-foreground: oklch(0.22 0.045 80);
+  --brand-surface: oklch(0.29 0.045 85);
+  /* Light ink: on dark paper the surface is a brown wash, so on-yellow ink
+     would disappear. */
+  --brand-ink: oklch(0.95 0.045 92);
+  --brand-border: oklch(0.58 0.11 88);
+  --brand-cool: oklch(0.72 0.13 248);
+  --brand-cool-foreground: oklch(0.86 0.08 250);
+  --brand-cool-surface: oklch(0.27 0.04 255);
+}
+
+/** Feedback and brand tokens as utilities: `bg-success-surface`, `text-brand`, … */
+@theme inline {
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-surface: var(--success-surface);
+  --color-success-border: var(--success-border);
+  --color-destructive-surface: var(--destructive-surface);
+  --color-destructive-border: var(--destructive-border);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-border: var(--warning-border);
+  --color-code-surface: var(--code-surface);
+  --color-code-foreground: var(--code-foreground);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-surface: var(--brand-surface);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-border: var(--brand-border);
+  --color-brand-cool: var(--brand-cool);
+  --color-brand-cool-foreground: var(--brand-cool-foreground);
+  --color-brand-cool-surface: var(--brand-cool-surface);
+  --shadow-elevation: var(--shadow-elevation);
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  /* Tailwind v4's preflight leaves a bare `border` on `currentColor`, so a card
+     would draw its outline in ink. Pointing every element at `--border` restores
+     the quiet rule, and controls that name their own colour
+     (`border-input`, `border-destructive`, …) still win by specificity. This is
+     deliberately not `* { @apply … }`: in v4 that also re-declares the `--tw-*`
+     custom properties per element, which severs inherited ones such as the font
+     stack. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
   }
   body {
-    @apply bg-background text-foreground;
+    /* next/font declares --font-inter / --font-geist-mono on <html>, of which
+       this element is a child, so the mappings resolve here. Redefining the
+       theme keys at this scope keeps `font-sans` / `font-mono` utilities in
+       sync with the base font family. */
+    --app-font-sans: var(--font-inter);
+    --app-font-heading: var(--font-inter);
+    --app-font-mono: var(--font-geist-mono);
+    --font-sans: var(--app-font-sans), ui-sans-serif, system-ui, sans-serif;
+    --font-heading: var(--app-font-heading), ui-sans-serif, system-ui, sans-serif;
+    --font-mono: var(--app-font-mono), ui-monospace, "SF Mono", monospace;
+    font-family: var(--font-sans);
+    @apply bg-background text-foreground antialiased;
   }
-  html {
-    @apply font-sans;
+  /* Headings are tight and heavy; sentence casing lives in the components. */
+  h1,
+  h2,
+  h3 {
+    @apply font-heading tracking-tight;
+  }
+  /* One visible focus style for every control, including inside modals. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+  /* Feedback must never rely on colour alone: these tokens pair with icons and
+     labels in the components. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

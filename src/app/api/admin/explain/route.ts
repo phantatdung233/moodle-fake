@@ -6,13 +6,13 @@
  * streaming `{text}` / `{error}` / `{done}` frames, never a 500 with a stack
  * trace. The Question is read from the Quiz the admin names (the session is
  * checked here too — middleware is only a UX gate), and the prompt carries no
- * student answer: Gemini helps the giảng viên re-read the Question, it never
+ * student answer: the AI helps the giảng viên re-read the Question, it never
  * grades and never decides by itself that an answer looks wrong.
  */
 import type { NextRequest } from "next/server";
 
 import { explainQuestion, EXPLANATION } from "@/lib/gemini/explain";
-import { encodeFrame, encodeFrames, readExplanationRequest } from "@/lib/gemini/request";
+import { encodeFrame, encodeFrames, readReviewExplanationRequest } from "@/lib/gemini/request";
 import { hasAdminSession } from "@/lib/admin/session";
 import { getQuestionForReview } from "@/lib/quiz/review-repository";
 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   if (!(await hasAdminSession())) return softFailure(NO_SESSION, 401);
 
   const payload = (await request.json().catch(() => null)) as { quizId?: unknown } | null;
-  const body = readExplanationRequest(payload);
+  const body = readReviewExplanationRequest(payload);
   if (!body.ok) return softFailure(body.error, 400);
 
   const quizId = typeof payload?.quizId === "string" ? payload.quizId : "";

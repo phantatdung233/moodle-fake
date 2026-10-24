@@ -26,7 +26,37 @@ export type ResultsFilter = {
   studentId?: string;
   /** Row cap for the table; defaults to RESULTS_PAGE_SIZE. */
   limit?: number;
+  /** Opaque "continue after this row" token from a previous page (`nextCursor`). */
+  cursor?: string;
 };
+
+/**
+ * A row that sorts strictly after `(startedAt, _id)` in `startedAt`-descending
+ * order, or `null` for a malformed token — the caller then shows the first page.
+ */
+function afterCursor(cursor: string): Record<string, unknown> | null {
+  const parsed = decodeCursor(cursor);
+  if (!parsed) return null;
+  const { startedAt, id } = parsed;
+  return {
+    $or: [
+      { startedAt: { $lt: startedAt } },
+      { startedAt, _id: { $lt: new mongoose.Types.ObjectId(id) } },
+    ],
+  };
+}
+
+/** `base64url(<ms>-<hex ObjectId>)`; malformed tokens mean "no cursor". */
+function encodeCursor(startedAt: Date, id: mongoose.Types.ObjectId): string {
+  return Buffer.from(`${startedAt.getTime()}-${String(id)}`).toString("base64url");
+}
+
+function decodeCursor(cursor: string): { startedAt: Date; id: string } | null {
+  const text = Buffer.from(cursor, "base64url").toString("utf8");
+  const match = /^(\d{1,15})-([0-9a-f]{24})$/.exec(text);
+  if (!match) return null;
+  return { startedAt: new Date(Number(match[1])), id: match[2] };
+}
 
 /** The filter exactly as the URL carried it, so a link can rebuild it. */
 export type ResultsQuery = {
@@ -79,6 +109,10 @@ export type ResultsPage = {
   totalRows: number;
   /** True when more rows matched than the cap allowed. */
   truncated: boolean;
+  /** True when another page of rows follows this one. */
+  hasNext: boolean;
+  /** Pass as `cursor` to get the next page; `null` on the last page. */
+  nextCursor: string | null;
   limit: number;
   /** The filter the page used, echoed back for links and the export URL. */
   query: ResultsQuery;
@@ -106,53 +140,72 @@ type AttemptRow = Pick<
  * The attempt number counts every Attempt of the same (Quiz, MSSV) that
  * started no later than this one — including finished and expired ones, since
  * an old lượt is never deleted when the sinh viên làm lại (user story 72).
+ *
+ * `cursor` pages through the same ordering: it names the last row of the
+ * previous page, so "trang sau" continues without skipping or repeating rows
+ * even while students are still submitting.
  */
 export async function listResults(filter: ResultsFilter = {}): Promise<ResultsPage> {
   await ensureConnection();
 
   const { query, limit } = readFilter(filter);
+  const after = filter.cursor === undefined ? null : afterCursor(filter.cursor);
+  const pageQuery = after === null ? query : { ...query, $and: [after] };
 
   const [totalRows, docs, quizzes] = await Promise.all([
     Attempt.countDocuments(query),
-    Attempt.find(query)
+    Attempt.find(pageQuery)
       .select(
         "studentId studentName quizId quizSlug quizVersion mode status startedAt submittedAt result.total",
       )
       .sort({ startedAt: -1, _id: -1 })
-      .limit(limit)
+      // One extra row tells us whether another page exists.
+      .limit(limit + 1)
       .lean<AttemptRow[]>(),
     Quiz.find({}).select("title status").sort({ createdAt: -1, _id: -1 }).lean(),
   ]);
 
+  const hasNext = docs.length > limit;
+  const shown = hasNext ? docs.slice(0, limit) : docs;
+
   // Attempt numbers need every earlier Attempt of the same pair, including the
-  // ones the cap hid; one extra query keeps the count exact for the rows shown.
-  const pairs = docs.map((doc) => ({ quizId: doc.quizId, studentId: doc.studentId }));
+  // ones on earlier pages; one extra query keeps the count exact for the rows shown.
+  const pairs = shown.map((doc) => ({ quizId: doc.quizId, studentId: doc.studentId }));
   const attemptsByPair = await countAttemptsBefore(
-    docs.map((doc) => doc.startedAt),
+    shown.map((doc) => doc.startedAt),
     pairs,
   );
 
   const quizTitles = new Map(quizzes.map((quiz) => [String(quiz._id), quiz.title]));
 
+  const rows = shown.map((doc, index) => ({
+    attemptId: String((doc as AttemptRow & { _id: mongoose.Types.ObjectId })._id),
+    studentId: doc.studentId,
+    studentName: doc.studentName,
+    quizId: String(doc.quizId),
+    quizSlug: doc.quizSlug,
+    quizTitle: quizTitles.get(String(doc.quizId)) ?? "(đề đã xoá)",
+    quizVersion: doc.quizVersion,
+    mode: doc.mode,
+    attemptNumber: attemptsByPair[index],
+    status: doc.status,
+    scorePercent: doc.result?.total ?? null,
+    startedAt: doc.startedAt,
+    submittedAt: doc.submittedAt ?? null,
+  }));
+
+  const last = shown[shown.length - 1] as
+    | (AttemptRow & { _id: mongoose.Types.ObjectId })
+    | undefined;
+
   return {
-    rows: docs.map((doc, index) => ({
-      attemptId: String((doc as AttemptRow & { _id: mongoose.Types.ObjectId })._id),
-      studentId: doc.studentId,
-      studentName: doc.studentName,
-      quizId: String(doc.quizId),
-      quizSlug: doc.quizSlug,
-      quizTitle: quizTitles.get(String(doc.quizId)) ?? "(đề đã xoá)",
-      quizVersion: doc.quizVersion,
-      mode: doc.mode,
-      attemptNumber: attemptsByPair[index],
-      status: doc.status,
-      scorePercent: doc.result?.total ?? null,
-      startedAt: doc.startedAt,
-      submittedAt: doc.submittedAt ?? null,
-    })),
+    rows,
     totalRows,
-    truncated: totalRows > docs.length,
+    truncated: totalRows > shown.length,
     limit,
+    hasNext,
+    /** Where "Trang sau" continues from; `null` on the last page. */
+    nextCursor: hasNext && last ? encodeCursor(last.startedAt, last._id) : null,
     query: {
       quizId: filter.quizId && mongoose.isValidObjectId(filter.quizId) ? filter.quizId : "",
       studentId: (filter.studentId ?? "").trim(),
@@ -248,7 +301,7 @@ export type AttemptDetailQuestion = {
   blankValues: string[];
   /** The stored grade for this Question, or `null` while the Attempt is open. */
   graded: { correct: boolean; score: number } | null;
-  /** Cached Gemini text for this snapshot's hash; never generated here. */
+  /** Always `null`: explanations are not stored; never generated here. */
   explanation: string | null;
 };
 
@@ -276,7 +329,7 @@ export type AttemptDetail = {
  * Nothing here reads `Quiz.questions`: the paper is whatever the sinh viên
  * started, so a newer upload or a Quiz edit can never rewrite an old review.
  * Explanations come from the cache keyed by each snapshot Question's hash, so
- * the text belongs to that version too (never calls Gemini).
+ * the text belongs to that version too (never calls the model).
  */
 export async function getAttemptDetail(attemptId: string): Promise<AttemptDetail | null> {
   if (!mongoose.isValidObjectId(attemptId)) return null;
@@ -291,8 +344,6 @@ export async function getAttemptDetail(attemptId: string): Promise<AttemptDetail
     studentId: doc.studentId,
     startedAt: { $lte: doc.startedAt },
   });
-  const { getCachedExplanation } = await import("@/lib/gemini/cache");
-
   const gradedByQuestion = new Map(
     (doc.result?.perQuestion ?? []).map((entry) => [entry.questionId, entry]),
   );
@@ -314,7 +365,7 @@ export async function getAttemptDetail(attemptId: string): Promise<AttemptDetail
           selectedOptionKeys: [...(answer?.selectedOptionKeys ?? [])],
           blankValues: [...(answer?.blankValues ?? [])],
           graded: graded ? { correct: graded.correct, score: graded.score } : null,
-          explanation: await getCachedExplanation(question.hash),
+          explanation: null,
         };
       }),
   );

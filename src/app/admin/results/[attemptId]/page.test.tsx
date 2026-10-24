@@ -1,7 +1,7 @@
 /**
  * Page seam: `/admin/results/[attemptId]` as the giảng viên receives it — the
- * snapshot Question text, the sinh viên's picks, the correct answer, the score
- * and the cached explanation.
+ * snapshot Question text, the sinh viên's picks, the correct answer and the
+ * score. Explanations are not stored: the page never shows one from before.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -17,7 +17,6 @@ import {
   resumeOrStartAttempt,
   submitAttempt,
 } from "@/lib/quiz/attempt-repository";
-import { saveExplanation } from "@/lib/gemini/cache";
 import { clearTestDatabase, startTestDatabase, stopTestDatabase } from "@/test/mongo";
 
 vi.mock("next/headers", () => ({
@@ -103,23 +102,14 @@ describe("/admin/results/[attemptId]", () => {
     expect(markup).toContain("1 điểm");
   });
 
-  it("hiện giải thích đã lưu của câu", async () => {
+  it("không hiện giải thích nào đã lưu: chi tiết lượt làm chỉ có phần chấm", async () => {
     const started = await resumeOrStartAttempt({ quizId, studentId: "B1", studentName: "An" });
     if (!started.ok) throw new Error(started.error);
-    const q001 = started.attempt.questionsSnapshot.find((question) => question.id === "Q001")!;
-    await saveExplanation({
-      questionHash: q001.hash,
-      questionId: "Q001",
-      text: "In ra e vì biến e được gán trước khi gọi print.",
-    });
-    // An open Attempt has no review yet; submitted, its detail shows the cache.
     await submitAttempt({ attemptId: started.attempt.id, studentId: "B1" });
 
     const markup = await html(started.attempt.id);
 
-    expect(markup).toContain("In ra e vì biến e được gán trước khi gọi print.");
     expect(markup).toContain("Giải thích");
-    // The other two Questions have no cached explanation yet.
     expect(markup).toContain("Chưa có giải thích");
   });
 

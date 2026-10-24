@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Prose, QuestionContent, QuestionImages } from "./question-content";
+import { CodeBlock, Prose, QuestionContent, QuestionImages } from "./question-content";
+import { prepareQuestionContent } from "./question-blocks";
 
 /**
  * Prose is the fallback path for a blank that sits outside a code block. The
@@ -36,30 +37,35 @@ describe("Prose", () => {
   });
 });
 
-/** Nested async components suspend during render, so flatten them before React sees them. */
-async function resolveAsync(node: React.ReactNode): Promise<React.ReactNode> {
-  if (Array.isArray(node)) return Promise.all(node.map(resolveAsync));
-  if (!node || typeof node !== "object" || !("type" in node)) return node;
-  const element = node as { type: unknown; props: Record<string, unknown> };
-  const props = { ...element.props };
-  if ("children" in props) props.children = await resolveAsync(props.children as React.ReactNode);
-  if (typeof element.type === "function") {
-    const rendered = await (element.type as (props: unknown) => unknown)(props);
-    return resolveAsync(rendered as React.ReactNode);
-  }
-  return { ...element, props } as React.ReactElement;
-}
+/**
+ * React refuses to render an `async` function as a Client Component ("Only
+ * Server Components can be async"), so the two components that client pages
+ * mount must stay synchronous. Guarding the function's constructor is the only
+ * way to see that from outside: `AsyncFunction !== Function`.
+ */
+describe("QuestionContent is renderable from a client component", () => {
+  it("is synchronous, and so is the code block it renders (the client runner mounts both)", () => {
+    expect(QuestionContent.constructor.name).toBe("Function");
+    expect(CodeBlock.constructor.name).toBe("Function");
+    expect(Prose.constructor.name).toBe("Function");
+  });
+
+  it("accepts plain, serializable blocks as props", async () => {
+    const blocks = await prepareQuestionContent("Điền [[1]] vào chỗ trống:\nprint([[2]])", 2);
+
+    // Structured-cloneable props survive the server → client boundary.
+    expect(structuredClone(blocks)).toEqual(blocks);
+  });
+});
 
 describe("QuestionContent", () => {
   it("puts a blank in prose and in code at the marker's own position (the review page's view)", async () => {
+    const blocks = await prepareQuestionContent(
+      "Điền [[1]] vào chỗ trống:\nfor i in range(2):\n    print([[2]])",
+      2,
+    );
     const html = renderToStaticMarkup(
-      (await resolveAsync(
-        await QuestionContent({
-          content: "Điền [[1]] vào chỗ trống:\nfor i in range(2):\n    print([[2]])",
-          blankCount: 2,
-          renderBlank: (name) => <input data-blank={name} />,
-        }),
-      )) as React.ReactElement,
+      <QuestionContent blocks={blocks} renderBlank={(name) => <input data-blank={name} />} />,
     );
 
     expect(html).not.toContain("[[1]]");
@@ -71,14 +77,9 @@ describe("QuestionContent", () => {
   });
 
   it("leaves a marker that is not a blank (outside 1..blankCount) as literal text", async () => {
+    const blocks = await prepareQuestionContent("Mảng 2 chiều: np.array([[1, 2]])", 0);
     const html = renderToStaticMarkup(
-      (await resolveAsync(
-        await QuestionContent({
-          content: "Mảng 2 chiều: np.array([[1, 2]])",
-          blankCount: 0,
-          renderBlank: (name) => <input data-blank={name} />,
-        }),
-      )) as React.ReactElement,
+      <QuestionContent blocks={blocks} renderBlank={(name) => <input data-blank={name} />} />,
     );
 
     expect(html).toContain("[[1, 2]]");

@@ -9,8 +9,7 @@ import { hashQuestionAnswers } from "@/lib/quiz/question-hash";
 import { clearTestDatabase, startTestDatabase, stopTestDatabase } from "@/test/mongo";
 import type { ExplainClient } from "./client";
 
-const { explainQuestion, isGeminiConfigured, EXPLANATION } = await import("./explain");
-const { getCachedExplanation } = await import("./cache");
+const { explainQuestion, isExplainConfigured, EXPLANATION } = await import("./explain");
 
 const MOODLE_FILE = path.resolve(process.cwd(), "moodle_quiz_merged.json");
 const realQuestions = parseQuizJson(JSON.parse(readFileSync(MOODLE_FILE, "utf8"))).questions;
@@ -61,7 +60,7 @@ describe("explainQuestion", () => {
     await clearTestDatabase();
   });
 
-  it("sinh giải thích bằng model khi chưa có cache", async () => {
+  it("sinh giải thích bằng model", async () => {
     const { client, calls } = fakeClient("Numpy là thư viện tính toán khoa học.");
 
     const result = await explainQuestion({
@@ -75,24 +74,25 @@ describe("explainQuestion", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("sinh viên thứ hai xem cùng câu nhận bản cache, không gọi model lần nữa", async () => {
-    const { client, calls } = fakeClient("Bản giải thích đầu tiên.");
+  it("mỗi lượt hỏi đều sinh lại theo đáp án của riêng sinh viên đó", async () => {
+    const { client, calls } = fakeClient("Bản giải thích đầu tiên.", "Bản giải thích thứ hai.");
     const q144 = question("Q144");
 
     const first = await explainQuestion({ question: q144, studentAnswer: askedByStudentA, client });
     expect(await collect(first)).toBe("Bản giải thích đầu tiên.");
 
-    // A different sinh viên (different answer) on the same Question: cache is
-    // per Question, not per answer, so nothing new is generated.
+    // A different sinh viên (different answer) on the same Question: the
+    // explanation depends on what was picked, so the model is asked again.
     const second = await explainQuestion({
       question: q144,
       studentAnswer: { selectedOptionKeys: ["b"], blankValues: [] },
       client,
     });
 
-    expect(calls).toHaveLength(1);
-    expect(second).toMatchObject({ ok: true, source: "cache" });
-    expect(await collect(second)).toBe("Bản giải thích đầu tiên.");
+    expect(second).toMatchObject({ ok: true, source: "generated" });
+    expect(await collect(second)).toBe("Bản giải thích thứ hai.");
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toContain("b");
   });
 
   it("giảng viên sửa đáp án → hash đổi → sinh giải thích mới", async () => {
@@ -120,8 +120,8 @@ describe("explainQuestion", () => {
     expect(calls).toHaveLength(2);
   });
 
-  it("Attempt cũ vẫn đọc được giải thích của bản đề cũ sau khi đáp án bị sửa", async () => {
-    const { client } = fakeClient("Bản cho đáp án cũ.", "Bản cho đáp án mới.");
+  it("Attempt cũ hỏi lại thì sinh giải thích mới theo đáp án của lượt đó", async () => {
+    const { client, calls } = fakeClient("Bản cho đáp án cũ.", "Bản cho đáp án mới.", "Bản sinh lại.");
     const q144 = question("Q144");
     await collect(await explainQuestion({ question: q144, studentAnswer: askedByStudentA, client }));
 
@@ -132,17 +132,19 @@ describe("explainQuestion", () => {
     const newQuestion = { ...edited, hash: hashQuestionAnswers(edited.content, edited.options, edited.blanks) };
     await collect(await explainQuestion({ question: newQuestion, studentAnswer: askedByStudentA, client }));
 
-    // The old Attempt carries the old snapshot, including the old hash.
+    // The old Attempt carries the old snapshot, including the old hash, but
+    // nothing is stored: reading it again asks the model once more.
     const oldAttemptView = await explainQuestion({
       question: q144,
       studentAnswer: askedByStudentA,
       client,
     });
-    expect(oldAttemptView).toMatchObject({ ok: true, source: "cache" });
-    expect(await collect(oldAttemptView)).toBe("Bản cho đáp án cũ.");
+    expect(oldAttemptView).toMatchObject({ ok: true, source: "generated" });
+    expect(await collect(oldAttemptView)).toBe("Bản sinh lại.");
+    expect(calls).toHaveLength(3);
   });
 
-  it("với fake model nói thẳng đáp án Q153 ghi trong đề sai, giải thích đó được trả về và cache", async () => {
+  it("với fake model nói thẳng đáp án Q153 ghi trong đề sai, giải thích đó được trả về", async () => {
     const flagged =
       "Đáp án ghi nhận trong đề (d: 2) sai kiến thức: else thực thi nên x phải bằng 3 (e).";
     const { client, calls } = fakeClient(flagged);
@@ -154,12 +156,16 @@ describe("explainQuestion", () => {
     expect(calls[0]).toContain("nói thẳng");
     expect(calls[0]).toContain(q153.content);
 
-    const second = await explainQuestion({ question: q153, studentAnswer: { selectedOptionKeys: ["e"] }, client });
-    expect(await collect(second)).toBe(flagged);
-    expect(calls).toHaveLength(1);
+    const second = await explainQuestion({
+      question: q153,
+      studentAnswer: { selectedOptionKeys: ["e"], blankValues: [] },
+      client,
+    });
+    expect(await collect(second)).toBe("Giải thích giả.");
+    expect(calls).toHaveLength(2);
   });
 
-  it("thiếu GEMINI_API_KEY → lỗi mềm 'Chưa cấu hình Gemini', không gọi model", async () => {
+  it("thiếu RIVER_API_KEY → lỗi mềm 'Chưa cấu hình API giải thích', không gọi model", async () => {
     const result = await explainQuestion({
       question: question("Q001"),
       studentAnswer: { selectedOptionKeys: ["d"], blankValues: [] },
@@ -167,29 +173,28 @@ describe("explainQuestion", () => {
     });
 
     expect(result).toMatchObject({ ok: false, error: EXPLANATION.notConfigured });
-    expect(EXPLANATION.notConfigured).toBe("Chưa cấu hình Gemini");
+    expect(EXPLANATION.notConfigured).toBe("Chưa cấu hình API giải thích");
     expect(await collect(result)).toBe("");
-    expect(await getCachedExplanation(question("Q001").hash)).toBeNull();
   });
 
-  it("đọc key từ GEMINI_API_KEY khi không truyền client (không gọi mạng)", async () => {
+  it("đọc key từ RIVER_API_KEY khi không truyền client (không gọi mạng)", async () => {
     // Empty key through env: same soft error, no SDK construction.
-    const original = process.env.GEMINI_API_KEY;
-    delete process.env.GEMINI_API_KEY;
+    const original = process.env.RIVER_API_KEY;
+    delete process.env.RIVER_API_KEY;
     try {
-      expect(isGeminiConfigured()).toBe(false);
+      expect(isExplainConfigured()).toBe(false);
       const result = await explainQuestion({ question: question("Q001"), studentAnswer: {} });
       expect(result).toMatchObject({ ok: false, error: EXPLANATION.notConfigured });
     } finally {
-      if (original !== undefined) process.env.GEMINI_API_KEY = original;
+      if (original !== undefined) process.env.RIVER_API_KEY = original;
     }
   });
 
-  it("model không dùng được (lỗi quyền/model) → lỗi mềm nhắc đổi GEMINI_MODEL, không lộ stack trace", async () => {
+  it("model không dùng được (lỗi quyền/model) → lỗi mềm nhắc đổi EXPLAIN_MODEL, không lộ stack trace", async () => {
     const client: ExplainClient = {
-      // The SDK throws a double-encoded JSON string, not an Error.
+      // The HTTP client throws a plain Error carrying the status and body.
       async *stream() {
-        throw '{"error":{"code":403,"message":"PERMISSION_DENIED: models/gemini-2.5-flash is not available"}}';
+        throw new Error('status 403: {"error":{"message":"invalid api key"}}');
       },
     };
 
@@ -198,7 +203,7 @@ describe("explainQuestion", () => {
     // `ok` is decided before the first token; the failure shows up as a frame.
     expect(await frames(result)).toEqual([{ error: EXPLANATION.modelUnavailable }]);
     expect(EXPLANATION.modelUnavailable).toBe(
-      "Gemini không dùng được với cấu hình hiện tại — kiểm tra GEMINI_API_KEY hoặc đổi GEMINI_MODEL",
+      "Model không dùng được với cấu hình hiện tại — kiểm tra RIVER_API_KEY hoặc đổi EXPLAIN_MODEL",
     );
   });
 
@@ -212,20 +217,60 @@ describe("explainQuestion", () => {
     const result = await explainQuestion({ question: question("Q001"), studentAnswer: {}, client });
 
     expect(await frames(result)).toEqual([{ error: EXPLANATION.unavailable }]);
-    expect(EXPLANATION.unavailable).toBe("Chưa cấu hình hoặc không dùng được Gemini");
+    expect(EXPLANATION.unavailable).toBe("Chưa cấu hình hoặc không dùng được API giải thích");
   });
 
-  it("model trả về rỗng → lỗi mềm chứ không cache chuỗi rỗng", async () => {
+  it("model quá tải (503 high demand) → báo chờ rồi thử lại, không đổ lỗi cấu hình", async () => {
+    const client: ExplainClient = {
+      async *stream() {
+        // Google's overloaded response; the SDK surfaces it as an error object.
+        throw new Error(
+          '{"error":{"code":503,"message":"This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.","status":"UNAVAILABLE"}}',
+        );
+      },
+    };
+
+    const result = await explainQuestion({ question: question("Q144"), studentAnswer: {}, client });
+
+    expect(await frames(result)).toEqual([{ error: EXPLANATION.modelBusy }]);
+    expect(EXPLANATION.modelBusy).toContain("quá tải");
+  });
+
+  it("model im lặng quá lâu (abort do timeout) → cùng thông báo chờ thử lại", async () => {
+    const client: ExplainClient = {
+      async *stream() {
+        // What the SDK throws once our AbortController fires.
+        throw new DOMException("This operation was aborted", "AbortError");
+      },
+    };
+
+    const result = await explainQuestion({ question: question("Q144"), studentAnswer: {}, client });
+
+    expect(await frames(result)).toEqual([{ error: EXPLANATION.modelBusy }]);
+  });
+
+  it("lỗi trả tiền/quota (429) là tạm thời, không phải cấu hình sai", async () => {
+    const client: ExplainClient = {
+      async *stream() {
+        throw '{"error":{"code":429,"message":"RESOURCE_EXHAUSTED: quota exceeded"}}';
+      },
+    };
+
+    const result = await explainQuestion({ question: question("Q144"), studentAnswer: {}, client });
+
+    expect(await frames(result)).toEqual([{ error: EXPLANATION.modelBusy }]);
+  });
+
+  it("model trả về rỗng → lỗi mềm", async () => {
     const { client } = fakeClient("   ");
     const q001 = question("Q001");
 
     const result = await explainQuestion({ question: q001, studentAnswer: {}, client });
 
     expect(await frames(result)).toEqual([{ error: EXPLANATION.unavailable }]);
-    expect(await getCachedExplanation(q001.hash)).toBeNull();
   });
 
-  it("lỗi giữa dòng: giữ phần chữ đã stream, báo lỗi mềm, không cache để lần sau sinh lại", async () => {
+  it("lỗi giữa dòng: giữ phần chữ đã stream, báo lỗi mềm, lần sau sinh lại", async () => {
     let attempts = 0;
     const client: ExplainClient = {
       async *stream() {

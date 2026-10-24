@@ -40,7 +40,7 @@ describe("readExplanationFrames", () => {
       responseOf(`data: ${JSON.stringify({ error: EXPLANATION.notConfigured })}\n\ndata: {"done":true}\n\n`),
     );
 
-    expect(seen).toEqual([{ error: "Chưa cấu hình Gemini" }, { done: true }]);
+    expect(seen).toEqual([{ error: "Chưa cấu hình API giải thích" }, { done: true }]);
   });
 
   it("bỏ qua frame rác thay vì ném lỗi vào panel", async () => {

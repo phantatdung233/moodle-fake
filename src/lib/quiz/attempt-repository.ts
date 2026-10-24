@@ -15,7 +15,6 @@ import {
 import { gradeAnswer, gradeAttempt, type BlankGrade, type AttemptAnswer } from "./grading";
 import { Quiz, type QuizMode, type QuizQuestion } from "./quiz.model";
 import { ensureConnection, isDuplicateKeyError } from "@/lib/mongodb";
-import { getCachedExplanation } from "@/lib/gemini/cache";
 
 /** MSSV identity: uppercase + trimmed, so " b2012345 " and "B2012345" are one student. */
 export function normalizeStudentId(raw: string): string {
@@ -38,13 +37,6 @@ export type AttemptView = {
   questionsSnapshot: QuizQuestion[];
   answers: AttemptDocument["answers"];
   result?: AttemptDocument["result"];
-  /**
-   * Gemini explanations already generated for this snapshot's Questions
-   * (`Question.hash` → text). Read from the cache by the page, so a Question
-   * explained before opens with its text instead of an empty panel; a hash
-   * missing here is simply "chưa có giải thích".
-   */
-  explanationsByHash?: Record<string, string>;
 };
 
 function toView(doc: AttemptDocument & { _id: mongoose.Types.ObjectId }): AttemptView {
@@ -75,25 +67,6 @@ function toView(doc: AttemptDocument & { _id: mongoose.Types.ObjectId }): Attemp
     })),
     ...(doc.result ? { result: doc.result } : {}),
   };
-}
-
-/**
- * Cached explanations for every Question in the paper, keyed by `Question.hash`
- * (Spec, user story 65). A cache failure returns `{}`: the page still renders,
- * the panels just start empty and ask the model as before.
- */
-export async function loadAttemptExplanations(
-  attempt: Pick<AttemptView, "questionsSnapshot">,
-): Promise<Record<string, string>> {
-  const hashes = [...new Set(attempt.questionsSnapshot.map((question) => question.hash))].filter(
-    Boolean,
-  );
-  const found: [string, string][] = [];
-  for (const hash of hashes) {
-    const text = await getCachedExplanation(hash);
-    if (text) found.push([hash, text]);
-  }
-  return Object.fromEntries(found);
 }
 
 export type StartAttemptInput = {
@@ -288,7 +261,7 @@ export type RevealResult = { ok: true; feedback: RevealFeedback } | { ok: false;
 /**
  * Practice only: grades the saved answer with `gradeAnswer`, persists the
  * result on the Attempt (`revealed: true`) and locks the Question. The grading
- * is local — the Gemini panel only explains the result, it never decides
+ * is local — the AI panel only explains the result, it never decides
  * correct/incorrect.
  */
 export async function revealQuestion(input: {
@@ -486,6 +459,11 @@ export type AttemptSummary = {
   mode: QuizMode;
   /** The Attempt just finished, if any: the one this browser is looking at. */
   latest: AttemptView | null;
+  /**
+   * The Attempt still open in this browser, when there is one. Filled by the
+   * home list so a card can offer "Làm tiếp"; the summary page does not need it.
+   */
+  inProgress: AttemptView | null;
   /** Finished Attempts (submitted + expired), newest first — the student's own history only. */
   history: AttemptView[];
   attemptCount: number;
@@ -525,14 +503,17 @@ export async function getSummaryForStudent(
   const latest =
     (attemptId ? attempts.find((attempt) => attempt.id === attemptId) : undefined) ?? finished[0] ?? null;
 
+  // The open Attempt, if any. `attempts` is already newest first, so the first
+  // in-progress row is the one the student should continue.
+  const inProgress = attempts.find((attempt) => attempt.status === "in_progress") ?? null;
+
   return {
     quizId: String(quiz._id),
     quizSlug: quiz.slug,
     quizTitle: quiz.title,
     mode: quiz.mode,
-    // Pre-rendered cached explanations, so a Question explained on an earlier
-    // Attempt opens with its text (Spec, user story 65).
-    latest: latest ? { ...latest, explanationsByHash: await loadAttemptExplanations(latest) } : null,
+    latest,
+    inProgress,
     history: finished,
     attemptCount: finished.length,
     ...(maxAttempts !== undefined ? { maxAttempts } : {}),

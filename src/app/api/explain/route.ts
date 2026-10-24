@@ -1,5 +1,5 @@
 /**
- * `POST /api/explain` — stream giải thích Gemini cho một Question (Spec, "Gemini").
+ * `POST /api/explain` — stream giải thích AI cho một Question (Spec, "AI").
  *
  * Luồng: cookie sinh viên → Attempt → Question trong snapshot (hash do server
  * quyết định) → cache hoặc stream. Response luôn là `text/event-stream` gồm các
@@ -38,22 +38,26 @@ function softFailure(message: string, status = 200): Response {
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
-  const body = readExplanationRequest(await request.json().catch(() => null));
-  if (!body.ok) return softFailure(body.error, 400);
-
+  // Identity first: without it the body cannot buy anything, and 401 is the
+  // message the panel shows ("nhập MSSV và họ tên").
   const jar = await cookies();
   const identity = await readStudentSession(
     jar.get(STUDENT_SESSION_COOKIE)?.value,
     process.env.SESSION_SECRET,
   );
-  if (!identity || !identity.attemptId || !identity.studentId) {
+  if (!identity) {
     return softFailure(NO_IDENTITY, 401);
   }
 
+  const body = readExplanationRequest(await request.json().catch(() => null));
+  if (!body.ok) return softFailure(body.error, 400);
+
+  // The body names the Attempt on screen; `questionForExplanation` only returns
+  // a Question whose Attempt belongs to the cookie's MSSV.
   let resolved: Awaited<ReturnType<typeof questionForExplanation>>;
   try {
     resolved = await questionForExplanation({
-      attemptId: identity.attemptId,
+      attemptId: body.attemptId,
       studentId: identity.studentId,
       questionId: body.questionId,
     });

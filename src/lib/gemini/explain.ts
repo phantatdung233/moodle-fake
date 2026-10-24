@@ -1,14 +1,15 @@
 /**
- * Sinh giải thích cho một Question: trả bản cache ngay nếu có, ngược lại stream
- * từ Gemini và ghi cache khi stream xong (Spec, "Gemini").
+ * Sinh giải thích cho một Question bằng cách stream từ API model (River AI).
  *
- * Đúng/sai và đáp án vẫn do `gradeAnswer` cục bộ quyết định — Gemini chỉ viết
- * lời giải thích. Hàm này không bao giờ ném lỗi vì Gemini/thiếu key/cache; mọi
+ * Không cache: mỗi sinh viên có thể chọn đáp án khác nhau nên lời giải thích phải
+ * được sinh theo đúng đáp án của lượt làm đó.
+ *
+ * Đúng/sai và đáp án vẫn do `gradeAnswer` cục bộ quyết định — model chỉ viết
+ * lời giải thích. Hàm này không bao giờ ném lỗi vì model/thiếu key; mọi
  * trục trặc thành `{ ok: false, error }` với thông báo tiếng Việt hiện thẳng lên UI.
  */
 import { buildExplanationPrompt, type ExplanationRequest } from "./prompt";
-import { getCachedExplanation, saveExplanation } from "./cache";
-import { createGeminiClient, getGeminiApiKey, type ExplainClient } from "./client";
+import { createExplainClient, getExplainApiKey, type ExplainClient } from "./client";
 import { EXPLANATION } from "./messages";
 
 /**
@@ -18,7 +19,7 @@ import { EXPLANATION } from "./messages";
 let testClientFactory: ((apiKey: string) => ExplainClient) | null = null;
 
 /** Test-only: run the real route against a fake model instead of the SDK. */
-export function useTestGeminiClient(factory: (apiKey: string) => ExplainClient): void {
+export function useTestExplainClient(factory: (apiKey: string) => ExplainClient): void {
   if (process.env.NODE_ENV !== "test") throw new Error("chỉ dùng trong test");
   testClientFactory = factory;
 }
@@ -34,21 +35,15 @@ export type ExplanationEvent = { text?: string; error?: string };
 export type ExplanationStream = AsyncIterable<ExplanationEvent>;
 
 export type ExplainResult =
-  | { ok: true; source: "cache" | "generated"; stream: ExplanationStream }
+  | { ok: true; source: "generated"; stream: ExplanationStream }
   | { ok: false; error: string; stream: ExplanationStream };
 
 export type ExplainQuestionInput = ExplanationRequest & {
-  /** Injected in tests; production builds the real Gemini client. */
+  /** Injected in tests; production builds the real HTTP client. */
   client?: ExplainClient;
-  /** Defaults to `GEMINI_API_KEY`; empty means "chưa cấu hình". */
+  /** Defaults to `RIVER_API_KEY`; empty means "chưa cấu hình". */
   apiKey?: string;
 };
-
-function eventsOf(text: string): ExplanationStream {
-  return (async function* () {
-    if (text !== "") yield { text };
-  })();
-}
 
 function softError(message: string): ExplainResult {
   return {
@@ -80,10 +75,26 @@ const CONFIG_ERRORS = [
 ];
 
 /**
+ * "The model is fine, come back later": overload (503/`UNAVAILABLE`, "high
+ * demand") and our own timeout. A 429 is also temporary (quota), never a
+ * configuration mistake.
+ */
+const BUSY_ERRORS = [
+  /\b429\b/,
+  /\b503\b/,
+  /UNAVAILABLE/i,
+  /overloaded/i,
+  /high demand/i,
+  /RESOURCE_EXHAUSTED/i,
+  /timed? ?out/i,
+  /aborted/i,
+];
+
+/**
  * Picks the soft error for a failed generation. A configuration problem points
- * at `GEMINI_API_KEY`/`GEMINI_MODEL`; anything else (network drop, 5xx,
- * timeout) keeps the generic message so a temporary outage is not mistaken for
- * a misconfiguration.
+ * at `RIVER_API_KEY`/`EXPLAIN_MODEL`; an overloaded or silent model asks for a
+ * retry; anything else (network drop, 5xx) keeps the generic message so a
+ * temporary outage is not mistaken for a misconfiguration.
  */
 export function explanationErrorFor(error: unknown): string {
   const text =
@@ -92,6 +103,7 @@ export function explanationErrorFor(error: unknown): string {
       : error instanceof Error
         ? `${error.name}: ${error.message}`
         : "";
+  if (BUSY_ERRORS.some((pattern) => pattern.test(text))) return EXPLANATION.modelBusy;
   return CONFIG_ERRORS.some((pattern) => pattern.test(text))
     ? EXPLANATION.modelUnavailable
     : EXPLANATION.unavailable;
@@ -99,13 +111,12 @@ export function explanationErrorFor(error: unknown): string {
 
 /**
  * Wraps the generator so every failure becomes frames, never a thrown error:
- * `ok: true` promises "cached text or a live model stream", the frame stream
+ * `ok: true` promises a live model stream; the frame stream
  * reports a mid-stream failure honestly while keeping whatever was already shown.
  */
 async function* generateFrames(
   client: ExplainClient,
   prompt: string,
-  onComplete: (text: string) => Promise<void>,
 ): AsyncGenerator<ExplanationEvent> {
   const chunks: string[] = [];
   let failure: string | null = null;
@@ -119,31 +130,21 @@ async function* generateFrames(
     failure = explanationErrorFor(error);
   }
 
-  // Only a complete, non-empty answer is worth caching: a failed or empty
-  // generation must ask the model again next time.
+  // A failed or empty generation must report itself honestly: nothing is stored
+  // to fall back on, so the student sees the error and can ask again.
   const text = chunks.join("").trim();
   if (failure !== null || text === "") {
     yield { error: failure ?? EXPLANATION.unavailable };
-    return;
-  }
-  try {
-    await onComplete(text);
-  } catch {
-    // The sinh viên already has the text; a failed cache write only costs one
-    // more model call later.
   }
 }
 
 /**
- * Cache hit → cached text instantly, no model call. Otherwise a live stream
- * that is cached on completion. Missing key / model unavailable → soft error;
- * the quiz keeps working because grading never goes through Gemini.
+ * Always a live stream, generated for this student's own answer. Missing key /
+ * model unavailable → soft error; the quiz keeps working because grading never
+ * goes through the AI provider.
  */
 export async function explainQuestion(input: ExplainQuestionInput): Promise<ExplainResult> {
-  const cached = await getCachedExplanation(input.question.hash);
-  if (cached) return { ok: true, source: "cache", stream: eventsOf(cached) };
-
-  const apiKey = input.apiKey ?? getGeminiApiKey();
+  const apiKey = input.apiKey ?? getExplainApiKey();
   // An injected client is the test seam: it replaces the key + SDK entirely.
   // Only the real path needs a key, so production behaves exactly as before.
   if (!input.client && apiKey.trim() === "") return softError(EXPLANATION.notConfigured);
@@ -153,10 +154,10 @@ export async function explainQuestion(input: ExplainQuestionInput): Promise<Expl
     client =
       input.client ??
       testClientFactory?.(apiKey) ??
-      createGeminiClient(apiKey);
+      createExplainClient(apiKey);
   } catch {
-    // Constructing the SDK fails on a malformed key: a configuration problem,
-    // so the message names the env vars to check.
+    // A malformed key or base URL surfaces here: a configuration problem, so
+    // the message names the env vars to check.
     return softError(EXPLANATION.modelUnavailable);
   }
 
@@ -166,17 +167,11 @@ export async function explainQuestion(input: ExplainQuestionInput): Promise<Expl
     stream: generateFrames(
       client,
       buildExplanationPrompt({ question: input.question, studentAnswer: input.studentAnswer }),
-      (text) =>
-        saveExplanation({
-          questionHash: input.question.hash,
-          questionId: input.question.id,
-          text,
-        }),
     ),
   };
 }
 
 /** For deciding whether to auto-request an explanation at all. */
-export function isGeminiConfigured(): boolean {
-  return getGeminiApiKey() !== "";
+export function isExplainConfigured(): boolean {
+  return getExplainApiKey() !== "";
 }

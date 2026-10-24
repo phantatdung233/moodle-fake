@@ -141,7 +141,7 @@ export type SaveQuestionAnswerResult =
 
 /**
  * Records the giảng viên's answer for one Question, marks it `ready`,
- * recomputes its hash (the cached Gemini explanation is now stale) and returns
+ * recomputes its hash (any stored explanation is now stale) and returns
  * the next Question to review so the page can advance.
  *
  * Rejects a Quiz that is not a draft, an unknown Question, an empty selection

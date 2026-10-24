@@ -1,6 +1,8 @@
+import { adminShell } from "@/lib/admin/shell";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { getQuizForAdmin, type QuizDetail } from "@/lib/quiz/repository";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AdminDatabaseError, AdminHeader } from "@/app/admin/admin-header";
 import { QuizSettingsForm } from "./settings-form";
 import { QuestionSelectionList } from "./question-selection";
 import { QuizLifecycleCard } from "./lifecycle-card";
@@ -48,10 +51,9 @@ export default async function AdminQuizPage({ params }: Props) {
     quiz = await getQuizForAdmin(id);
   } catch {
     return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-8">
-        <p className="text-sm text-destructive">
-          Không kết nối được cơ sở dữ liệu. Kiểm tra MONGODB_URI và mongod.
-        </p>
+      <main className={adminShell}>
+        <AdminHeader active="quizzes" />
+        <AdminDatabaseError />
       </main>
     );
   }
@@ -59,16 +61,22 @@ export default async function AdminQuizPage({ params }: Props) {
   if (!quiz) notFound();
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8">
-      <nav className="mb-4 text-sm">
-        <Link href="/admin" className="text-muted-foreground hover:underline">
-          ← Danh sách đề
+    <main className={adminShell}>
+      <AdminHeader active="quizzes" />
+
+      <nav aria-label="Đường dẫn" className="mb-3 text-sm">
+        <Link
+          href="/admin"
+          className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft aria-hidden className="size-3.5" />
+          Đề thi
         </Link>
       </nav>
 
       <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold">{quiz.title}</h1>
+          <h1 className="text-2xl font-semibold text-balance">{quiz.title}</h1>
           <p className="text-sm break-all text-muted-foreground">
             /q/{quiz.slug} · {modeLabels[quiz.mode]} · bản {quiz.version}
             {quiz.mode === "exam" && quiz.timeLimit !== null
@@ -79,56 +87,58 @@ export default async function AdminQuizPage({ params }: Props) {
               : ""}
           </p>
         </div>
-        <span className="rounded-full border px-3 py-1 text-xs">
+        <span className="rounded-md border px-3 py-1 text-xs font-medium">
           {statusLabels[quiz.status]}
         </span>
       </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Tóm tắt đề</CardTitle>
-          <CardDescription>
-            {quiz.status === "draft"
-              ? "Đề nháp: vẫn sửa được câu hỏi và đáp án trước khi publish."
-              : quiz.status === "published"
-                ? "Đề đã publish và đóng băng. Sinh viên đang làm theo bản đã publish."
-                : "Đề đã lưu trữ. Các lượt làm cũ vẫn đọc được."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-            <Stat label="Tổng câu" value={quiz.questionCount} />
-            <Stat label="Trắc nghiệm" value={quiz.multichoiceCount} />
-            <Stat label="Điền khuyết" value={quiz.multianswerCount} />
-            <Stat label="Cần duyệt đáp án" value={quiz.needsReviewCount} highlight />
-            <Stat label="Sẽ publish" value={quiz.publishableCount} />
-            <Stat label="Lượt làm" value={quiz.attemptCount} />
-            <Stat label="Đã publish lúc" value={formatDate(quiz.publishedAt)} />
-          </dl>
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Tóm tắt đề</CardTitle>
+            <CardDescription>
+              {quiz.status === "draft"
+                ? "Đề nháp: còn sửa được câu hỏi và đáp án."
+                : quiz.status === "published"
+                  ? "Đã publish: đề được đóng băng."
+                  : "Đã lưu trữ. Kết quả cũ vẫn đọc được."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+              <Stat label="Tổng câu" value={quiz.questionCount} />
+              <Stat label="Trắc nghiệm" value={quiz.multichoiceCount} />
+              <Stat label="Điền khuyết" value={quiz.multianswerCount} />
+              <Stat label="Cần duyệt đáp án" value={quiz.needsReviewCount} highlight />
+              <Stat label="Sẽ publish" value={quiz.publishableCount} />
+              <Stat label="Lượt làm" value={quiz.attemptCount} />
+              <Stat label="Đã publish lúc" value={formatDate(quiz.publishedAt)} />
+            </dl>
 
-          <p className="mt-4 text-sm text-muted-foreground">
-            {quiz.needsReviewCount > 0
-              ? `Còn ${quiz.needsReviewCount} câu chưa có đáp án. Mở trang duyệt đáp án để trả lời từng câu.`
-              : "Mọi câu đang bật đã có đáp án."}
-          </p>
-        </CardContent>
-      </Card>
+            <p className="mt-4 text-sm text-muted-foreground">
+              {quiz.needsReviewCount > 0
+                ? `Còn ${quiz.needsReviewCount} câu chưa có đáp án. Mở trang duyệt đáp án để trả lời từng câu.`
+                : "Mọi câu đang bật đã có đáp án."}
+            </p>
+          </CardContent>
+        </Card>
 
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Publish & khoá đề</CardTitle>
-          <CardDescription>
-            Publish chỉ đưa ra những câu đang bật và đã có đáp án.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <QuizLifecycleCard quiz={quiz} />
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Publish & khoá đề</CardTitle>
+            <CardDescription>
+              Publish chỉ đưa ra những câu đang bật và đã có đáp án.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <QuizLifecycleCard quiz={quiz} />
+          </CardContent>
+        </Card>
+      </div>
 
       {quiz.status === "draft" ? (
-        <>
-          <Card className="mt-6">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+          <Card className="lg:sticky lg:top-4">
             <CardHeader>
               <CardTitle>Cài đặt đề</CardTitle>
               <CardDescription>
@@ -147,7 +157,7 @@ export default async function AdminQuizPage({ params }: Props) {
             </CardContent>
           </Card>
 
-          <Card className="mt-6">
+          <Card>
             <CardHeader>
               <CardTitle>Chọn câu đưa vào đề</CardTitle>
               <CardDescription>
@@ -162,7 +172,7 @@ export default async function AdminQuizPage({ params }: Props) {
               />
             </CardContent>
           </Card>
-        </>
+        </div>
       ) : (
         <Card className="mt-6">
           <CardHeader>
@@ -211,9 +221,9 @@ function Stat({
   highlight?: boolean;
 }) {
   return (
-    <div className="flex flex-col rounded-lg border px-3 py-2">
+    <div className="flex flex-col border px-3 py-2">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={highlight ? "text-lg font-semibold text-amber-600" : "text-lg font-semibold"}>
+      <dd className={highlight ? "text-lg font-semibold text-warning" : "text-lg font-semibold"}>
         {value}
       </dd>
     </div>

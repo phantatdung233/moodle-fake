@@ -3,10 +3,8 @@ import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { MongoMemoryServer } from "mongodb-memory-server";
 import { Quiz } from "./quiz.model";
-import { ExplanationCache } from "@/lib/gemini/explanation.model";
 import { parseQuizJson } from "./parser";
 import { createDraftQuizFromQuestions } from "./repository";
-import { hashQuestionAnswers } from "./question-hash";
 import {
   archiveQuiz,
   deleteDraftQuiz,
@@ -41,46 +39,12 @@ describe("xoá đề nháp", () => {
     await clearTestDatabase();
   });
 
-  it("xoá hẳn đề nháp cùng giải thích đã cache", async () => {
+  it("xoá hẳn đề nháp", async () => {
     const quizId = await seedQuiz();
-    const quiz = await Quiz.findById(quizId).lean();
-    const hash = quiz?.questions[0]?.hash;
-    if (!hash) throw new Error("missing hash");
-    await ExplanationCache.create({ questionHash: hash, questionId: quiz.questions[0].id, text: "x" });
 
     expect(await deleteDraftQuiz(quizId)).toEqual({ ok: true });
 
     expect(await Quiz.findById(quizId).lean()).toBeNull();
-    expect(await ExplanationCache.countDocuments({ questionHash: hash })).toBe(0);
-  });
-
-  it("chỉ xoá giải thích của đúng đề bị xoá", async () => {
-    // Two drafts share every Question hash; the explanation is per hash, so the
-    // kept draft must keep its cache entry even though the id matches too.
-    const doomedId = await seedQuiz("de-xoa");
-    const keptId = await seedQuiz("de-giu");
-    const doomed = await Quiz.findById(doomedId).lean();
-    const kept = await Quiz.findById(keptId).lean();
-    if (!doomed || !kept) throw new Error("missing quiz");
-    const sharedHash = doomed.questions[0].hash;
-    const ownHash = hashQuestionAnswers("Câu riêng của đề được giữ", [], []);
-    await Quiz.updateOne({ _id: keptId, "questions.id": kept.questions[0].id }, { $set: { "questions.$.hash": ownHash } });
-    await ExplanationCache.create({
-      questionHash: sharedHash,
-      questionId: kept.questions[0].id,
-      text: "của đề bị xoá",
-    });
-    await ExplanationCache.create({
-      questionHash: ownHash,
-      questionId: kept.questions[0].id,
-      text: "của đề được giữ",
-    });
-
-    expect(await deleteDraftQuiz(doomedId)).toEqual({ ok: true });
-
-    expect(await Quiz.findById(keptId).lean()).not.toBeNull();
-    expect(await ExplanationCache.countDocuments({})).toBe(1);
-    expect((await ExplanationCache.findOne({}).lean())?.text).toBe("của đề được giữ");
   });
 
   it("từ chối xoá đề đã publish hoặc đã lưu trữ", async () => {

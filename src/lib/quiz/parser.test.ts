@@ -176,7 +176,7 @@ describe("parseQuizJson on the real Moodle export", () => {
     expect(stats.emptyAnswers).toBe(10);
   });
 
-  it("gives each Question a content+answer hash so an edited answer invalidates the Gemini explanation", () => {
+  it("gives each Question a content+answer hash so an edited answer invalidates any stored explanation", () => {
     const { questions } = parseRealMoodleExport();
 
     expect(questions.every((question) => /^[0-9a-f]{64}$/.test(question.hash))).toBe(true);

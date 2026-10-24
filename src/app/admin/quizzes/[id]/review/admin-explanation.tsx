@@ -4,26 +4,28 @@
  * "Giải thích bằng AI" on the admin's review page (Spec, user story 21 in its
  * smallest useful form).
  *
- * The admin sees the cached explanation for a Question when one exists, and
- * only asks Gemini explicitly. No heuristics here: the system never decides by
- * itself that a recorded answer looks wrong (Q066, Q070 are examples a human
- * noticed, not rules the code applies).
+ * The admin asks the AI explicitly for the Question on screen; nothing is
+ * stored, since an explanation depends on the answer being explained. No
+ * heuristics here: the system never decides by itself that a recorded answer
+ * looks wrong (Q066, Q070 are examples a human noticed, not rules the code
+ * applies).
  */
 import { useState } from "react";
 import { Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { readExplanationFrames } from "@/lib/gemini/frame-reader";
+import { ExplanationText } from "@/components/quiz/explanation-text";
 
 export type AdminExplanationProps = {
   quizId: string;
   questionId: string;
   questionHash: string;
-  /** Cached text read on the server; `null` when Gemini has not explained it yet. */
-  initialText: string | null;
+  /** Option keys / accepted blanks the giảng viên is reviewing, for the verdict line. */
+  acceptedAnswers?: string[];
 };
 
 const NETWORK_ERROR = "Không tải được giải thích. Kiểm tra kết nối rồi thử lại.";
-const NO_TEXT = "Gemini không trả về giải thích nào. Thử lại sau.";
+const NO_TEXT = "Model không trả về giải thích nào. Thử lại sau.";
 
 type Status = "idle" | "streaming" | "done" | "error";
 
@@ -31,11 +33,11 @@ export function AdminExplanation({
   quizId,
   questionId,
   questionHash,
-  initialText,
+  acceptedAnswers = [],
 }: AdminExplanationProps) {
-  const [text, setText] = useState(initialText ?? "");
+  const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<Status>(initialText ? "done" : "idle");
+  const [status, setStatus] = useState<Status>("idle");
 
   async function generate() {
     setStatus("streaming");
@@ -83,16 +85,11 @@ export function AdminExplanation({
       aria-busy={streaming}
       data-testid="admin-explanation"
       data-status={status}
-      className="flex flex-col gap-2 rounded-lg border border-sky-600/30 bg-sky-50/60 p-3 text-sm dark:bg-sky-950/30"
+      className="flex flex-col gap-2 rounded-sm border border-l-2 border-border border-l-primary bg-muted/40 p-3 text-sm"
     >
       <p className="flex items-center gap-2 font-medium">
         <Sparkles className="size-4 text-muted-foreground" aria-hidden />
         Giải thích bằng AI
-        {text && status === "done" ? (
-          <span className="text-xs font-normal text-muted-foreground">
-            {initialText ? "đã có sẵn" : ""}
-          </span>
-        ) : null}
         {streaming ? (
           <Loader2 className="size-3 animate-spin text-muted-foreground" aria-hidden />
         ) : null}
@@ -102,9 +99,7 @@ export function AdminExplanation({
         Đối chiếu câu hỏi với đáp án ghi nhận trong đề; đáp án đúng/sai vẫn do bạn quyết định.
       </p>
 
-      {text ? (
-        <div className="whitespace-pre-wrap leading-relaxed text-pretty">{text}</div>
-      ) : null}
+      {text ? <ExplanationText text={text} context={{ correctOptionKeys: acceptedAnswers }} /> : null}
 
       {error ? (
         <p role="alert" className="text-muted-foreground">

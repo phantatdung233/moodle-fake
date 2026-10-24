@@ -9,9 +9,9 @@ import {
 const secret = "bi-mat-phien-test";
 
 describe("student identity cookie", () => {
-  it("carries the MSSV and attempt id, httpOnly, and is readable back", async () => {
+  it("carries the MSSV and họ tên, httpOnly, and is readable back", async () => {
     const cookie = await createStudentSessionCookie(
-      { studentId: "B2012345", attemptId: "6a1b2c3d4e5f60718293a4b5" },
+      { studentId: "B2012345", studentName: "Nguyễn Văn An" },
       secret,
     );
 
@@ -21,8 +21,19 @@ describe("student identity cookie", () => {
     expect(cookie.options.path).toBe("/");
     expect(await readStudentSession(cookie.value, secret)).toEqual({
       studentId: "B2012345",
-      attemptId: "6a1b2c3d4e5f60718293a4b5",
+      studentName: "Nguyễn Văn An",
     });
+  });
+
+  it("names no Attempt: one identity serves every Quiz", async () => {
+    const cookie = await createStudentSessionCookie(
+      { studentId: "B2012345", studentName: "An" },
+      secret,
+    );
+
+    const identity = await readStudentSession(cookie.value, secret);
+    expect(identity).toEqual({ studentId: "B2012345", studentName: "An" });
+    expect(Object.keys(identity ?? {})).not.toContain("attemptId");
   });
 
   it("is separate from the admin cookie", async () => {
@@ -34,7 +45,7 @@ describe("student identity cookie", () => {
   it("refuses a forged, expired or missing cookie", async () => {
     const { signToken } = await import("@/lib/auth/token");
     const cookie = await createStudentSessionCookie(
-      { studentId: "B2012345", attemptId: "abc" },
+      { studentId: "B2012345", studentName: "An" },
       secret,
     );
 
@@ -43,7 +54,11 @@ describe("student identity cookie", () => {
     expect(await readStudentSession(cookie.value, "bi-mat-khac")).toBeNull();
 
     const stale = await signToken(
-      { studentId: "B2012345", attemptId: "abc", iat: Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 31 },
+      {
+        studentId: "B2012345",
+        studentName: "An",
+        iat: Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 31,
+      },
       secret,
     );
     expect(await readStudentSession(stale, secret)).toBeNull();
@@ -54,8 +69,15 @@ describe("student identity cookie", () => {
     const now = Math.floor(Date.now() / 1000);
 
     expect(await readStudentSession(await signToken({ iat: now }, secret), secret)).toBeNull();
+    // An MSSV without a name is the shape of an old cookie: not usable.
     expect(
       await readStudentSession(await signToken({ studentId: "B1", iat: now }, secret), secret),
+    ).toBeNull();
+    expect(
+      await readStudentSession(
+        await signToken({ studentId: "B1", studentName: "", iat: now }, secret),
+        secret,
+      ),
     ).toBeNull();
   });
 

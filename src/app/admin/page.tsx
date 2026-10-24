@@ -1,6 +1,6 @@
+import { adminShell } from "@/lib/admin/shell";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { logoutAdmin } from "@/lib/admin/actions";
 import { listQuizzes, type QuizListItem } from "@/lib/quiz/repository";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AdminDatabaseError, AdminHeader } from "./admin-header";
 import { UploadForm } from "./upload-form";
 
 export const metadata: Metadata = {
@@ -35,9 +36,7 @@ async function loadQuizzes(): Promise<
   try {
     return { quizzes: await listQuizzes() };
   } catch {
-    return {
-      error: "Không kết nối được cơ sở dữ liệu. Kiểm tra MONGODB_URI và mongod.",
-    };
+    return { error: "DB_ERROR" };
   }
 }
 
@@ -45,70 +44,60 @@ export default async function AdminHomePage() {
   const result = await loadQuizzes();
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-8">
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+    <main className={adminShell}>
+      <AdminHeader active="quizzes" />
+
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Quản trị đề thi</h1>
-          <p className="text-sm text-muted-foreground">
-            Upload file Moodle để tạo đề nháp, rồi duyệt đáp án trước khi publish.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <form action={logoutAdmin}>
-            <Button type="submit" variant="outline">
-              Đăng xuất
-            </Button>
-          </form>
-          <Button asChild variant="outline">
-            <Link href="/admin/results">Kết quả sinh viên</Link>
-          </Button>
+          <h1 className="text-2xl font-semibold">Đề thi</h1>
+          {"error" in result ? (
+            <p className="text-sm text-muted-foreground">Cần kết nối lại.</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {result.quizzes.length} đề · tạo mới bằng file JSON Moodle.
+            </p>
+          )}
         </div>
       </header>
 
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Tạo đề từ file JSON</CardTitle>
-          <CardDescription>
-            Chọn file xuất từ Moodle, xem trước số câu và lỗi parse, rồi xác nhận để
-            tạo đề nháp. Upload lại tạo một đề mới, không ghi đè đề cũ.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <UploadForm />
-        </CardContent>
-      </Card>
+      <div className="mb-8 grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+        <Card className="lg:sticky lg:top-16">
+          <CardHeader>
+            <CardTitle>Tạo đề từ file JSON</CardTitle>
+            <CardDescription>
+              Xem trước số câu rồi xác nhận. Mỗi lần upload là một đề nháp mới.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <UploadForm />
+          </CardContent>
+        </Card>
 
-      <section aria-labelledby="quiz-list-heading">
-        <h2 id="quiz-list-heading" className="mb-3 text-lg font-semibold">
-          Danh sách đề
-        </h2>
+        <section aria-labelledby="quiz-list-heading">
+          <h2 id="quiz-list-heading" className="mb-3 text-lg font-semibold">
+            Danh sách đề
+          </h2>
 
-        {"error" in result ? (
-          <Card>
-            <CardContent>
-              <p className="text-sm text-destructive">{result.error}</p>
-            </CardContent>
-          </Card>
-        ) : result.quizzes.length === 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Chưa có đề nào</CardTitle>
-              <CardDescription>
-                Upload file JSON Moodle ở trên (hoặc chạy{" "}
-                <code className="font-mono">pnpm seed</code>) để tạo đề nháp.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {result.quizzes.map((quiz) => (
-              <li key={quiz.id}>
-                <QuizCard quiz={quiz} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          {"error" in result ? (
+            <AdminDatabaseError />
+          ) : result.quizzes.length === 0 ? (
+            <div className="rounded-xl border border-dashed bg-card/60 px-6 py-14 text-center">
+              <p className="font-medium">Chưa có đề nào</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Upload file JSON Moodle ở bên trái để tạo đề nháp đầu tiên.
+              </p>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {result.quizzes.map((quiz) => (
+                <li key={quiz.id}>
+                  <QuizCard quiz={quiz} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
@@ -135,14 +124,22 @@ function QuizCard({ quiz }: { quiz: QuizListItem }) {
             label="Cần duyệt"
             value={String(quiz.needsReviewCount)}
             highlight={quiz.needsReviewCount > 0}
+            href={
+              quiz.needsReviewCount > 0
+                ? `/admin/quizzes/${quiz.id}/review`
+                : undefined
+            }
           />
           <Stat label="Lượt làm" value={String(quiz.attemptCount)} />
         </dl>
-        <div className="flex flex-col gap-2 sm:items-end">
+        <div className="flex flex-wrap gap-2 sm:flex-col sm:items-stretch">
           <Button asChild variant="outline" size="sm">
             <Link href={`/admin/quizzes/${quiz.id}/review`}>
               {quiz.needsReviewCount > 0 ? "Duyệt đáp án" : "Xem lại đáp án"}
             </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link href={`/admin/results?quizId=${quiz.id}`}>Kết quả</Link>
           </Button>
         </div>
       </CardContent>
@@ -154,16 +151,26 @@ function Stat({
   label,
   value,
   highlight = false,
+  href,
 }: {
   label: string;
   value: string;
   highlight?: boolean;
+  /** Makes the number a link to where it can be acted on. */
+  href?: string;
 }) {
   return (
     <div className="flex flex-col sm:items-end">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={highlight ? "font-medium text-amber-600" : "font-medium"}>
-        {value}
+      <dd className={highlight ? "font-medium text-warning" : "font-medium"}>
+        {href ? (
+          <Link href={href} className="underline underline-offset-4">
+            {value}
+            <span className="sr-only"> — duyệt đáp án</span>
+          </Link>
+        ) : (
+          value
+        )}
       </dd>
     </div>
   );

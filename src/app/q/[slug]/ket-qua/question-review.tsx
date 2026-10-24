@@ -1,31 +1,35 @@
+import { Check, Minus, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { AttemptQuestionResult } from "@/lib/quiz/attempt.model";
 import type { QuizQuestion } from "@/lib/quiz/quiz.model";
-import { splitPlaceholders } from "@/lib/quiz/content";
-import { parseQuestionContent } from "@/lib/quiz/markdown";
 import { blankNumber } from "@/lib/student/answers";
-import { CodeBlock, Prose, QuestionImages } from "@/components/quiz/question-content";
+import {
+  CodeBlock,
+  Prose,
+  QuestionImages,
+} from "@/components/quiz/question-content";
+import { prepareQuestionContent } from "@/components/quiz/question-blocks";
 import { ExplanationPanel } from "@/components/quiz/explanation-panel";
+import { ExplanationText } from "@/components/quiz/explanation-text";
 
 export type QuestionReviewProps = {
+  /**
+   * The Attempt these answers belong to; the AI panel names it so the server
+   * can check the cookie's MSSV owns it. Omitted on the admin's read-only view,
+   * which shows stored explanations instead of calling the model.
+   */
+  attemptId?: string;
   index: number;
   question: QuizQuestion;
   grade: AttemptQuestionResult;
   selectedOptionKeys: string[];
   blankValues: string[];
   /**
-   * Server-rendered cached explanation. When provided (the admin's attempt
-   * detail), it is shown instead of the AI panel, which would wake the model.
-   * `null` means "nothing cached for this snapshot".
+   * A stored explanation shown instead of the AI panel. Only the admin's
+   * attempt detail passes one; `null` means "ask the model".
    */
   explanation?: string | null;
-  /**
-   * Cached text for the AI panel: the summary page reads the cache on the
-   * server, so a Question explained before renders with its text already there
-   * and the panel only asks the model when nothing is stored.
-   */
-  initialExplanation?: string | null;
 };
 
 /**
@@ -33,50 +37,80 @@ export type QuestionReviewProps = {
  * correct, per-blank detail for a multianswer, and the score. Server-rendered
  * (shiki highlight), practice and exam alike.
  */
-export function QuestionReview({
+export async function QuestionReview({
+  attemptId,
   index,
   question,
   grade,
   selectedOptionKeys,
   blankValues,
   explanation,
-  initialExplanation = null,
 }: QuestionReviewProps) {
   const answered =
-    selectedOptionKeys.length > 0 || blankValues.some((value) => value.trim() !== "");
+    selectedOptionKeys.length > 0 ||
+    blankValues.some((value) => value.trim() !== "");
   const tone = grade.correct ? "correct" : answered ? "wrong" : "blank";
   const blankIndex = new Map(
-    question.blanks.map((blank, position) => [blankNumber(blank.name, position), position]),
+    question.blanks.map((blank, position) => [
+      blankNumber(blank.name, position),
+      position,
+    ]),
   );
-  const blocks = parseQuestionContent(splitPlaceholders(question.content, question.blanks.length));
+  const blanks = await prepareQuestionContent(
+    question.content,
+    question.blanks.length,
+  );
+  const explanationContext = {
+    selectedOptionKeys,
+    blankValues,
+    blankNames: question.blanks.map((blank, index) =>
+      blankNumber(blank.name, index),
+    ),
+    correctOptionKeys: question.options
+      .filter((option) => option.correct)
+      .map((option) => option.key),
+    correctBlankAnswers: question.blanks.map((blank) => blank.acceptedAnswer),
+  };
 
   return (
     <article
       aria-label={`Câu ${index + 1}`}
       data-tone={tone}
       className={cn(
-        "flex flex-col gap-3 rounded-lg border p-4",
-        tone === "correct" && "border-emerald-600/50",
-        tone === "wrong" && "border-destructive/40",
+        "flex flex-col gap-3 rounded-xl border bg-card p-4 sm:p-5",
+        tone === "correct" && "border-success-border",
+        tone === "wrong" && "border-destructive-border",
       )}
     >
-      <header className="flex flex-wrap items-center gap-2">
-        <span className="font-medium">Câu {index + 1}</span>
-        <Badge variant="outline">Mã {question.id}</Badge>
-        {tone === "correct" ? (
-          <Badge variant="secondary">Đúng</Badge>
-        ) : tone === "wrong" ? (
-          <Badge variant="destructive">Sai</Badge>
-        ) : (
-          <Badge variant="outline">Bỏ trống</Badge>
-        )}
-        <span className="ml-auto text-sm text-muted-foreground">
+      <header className="flex flex-wrap items-center gap-2 border-b pb-3">
+        <span className="font-medium tabular-nums">Câu {index + 1}</span>
+        <Badge variant="outline" className="font-mono">
+          {question.id}
+        </Badge>
+        <span
+          className={cn(
+            "flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+            tone === "correct" && "bg-success-surface text-success-foreground",
+            tone === "wrong" && "bg-destructive-surface text-destructive",
+            tone === "blank" && "bg-muted text-muted-foreground",
+          )}
+        >
+          {tone === "correct" ? (
+            <Check aria-hidden="true" className="size-3" />
+          ) : tone === "wrong" ? (
+            <X aria-hidden="true" className="size-3" />
+          ) : (
+            <Minus aria-hidden="true" className="size-3" />
+          )}
+          {tone === "correct" ? "Đúng" : tone === "wrong" ? "Sai" : "Bỏ trống"}
+        </span>
+        <span className="ml-auto text-sm text-muted-foreground tabular-nums">
           {formatScore(grade.score)} điểm
         </span>
       </header>
 
       <div className="flex flex-col gap-1 text-sm">
-        {blocks.map((block, blockIndex) =>
+        {blanks.map((block, blockIndex) =>
           block.kind === "markdown" ? (
             <Prose key={blockIndex} text={block.text} />
           ) : (
@@ -85,15 +119,19 @@ export function QuestionReview({
               lines={block.lines}
               renderBlank={(name) => {
                 const position = blankIndex.get(name);
-                const value = position === undefined ? "" : (blankValues[position] ?? "");
-                const blank = position === undefined ? undefined : grade.perBlank?.[position];
+                const value =
+                  position === undefined ? "" : (blankValues[position] ?? "");
+                const blank =
+                  position === undefined
+                    ? undefined
+                    : grade.perBlank?.[position];
                 return (
                   <span
                     className={cn(
-                      "inline-block min-w-24 rounded border px-2 font-mono",
+                      "inline-block min-w-24 rounded-md border px-2 font-mono",
                       blank?.correct
-                        ? "border-emerald-600 bg-emerald-50 text-emerald-900"
-                        : "border-destructive bg-destructive/10 text-destructive",
+                        ? "border-success-border bg-success-surface text-success-foreground"
+                        : "border-destructive-border bg-destructive-surface text-destructive",
                     )}
                   >
                     {value === "" ? "(trống)" : value}
@@ -114,18 +152,26 @@ export function QuestionReview({
               <li
                 key={option.key}
                 className={cn(
-                  "flex gap-2 rounded border px-2 py-1",
-                  option.correct && "border-emerald-600/50 bg-emerald-50",
-                  picked && !option.correct && "border-destructive/40 bg-destructive/5",
+                  "flex items-start gap-2 rounded-lg border border-transparent px-2 py-1.5",
+                  option.correct && "border-success-border bg-success-surface",
+                  picked &&
+                    !option.correct &&
+                    "border-destructive-border bg-destructive-surface",
                 )}
               >
-                <span className="font-mono text-muted-foreground">{option.key}.</span>
-                <span className="min-w-0 flex-1">{option.text.replace(/\s*\n+\s*/g, " ")}</span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {option.key}.
+                </span>
+                <span className="min-w-0 flex-1">
+                  {option.text.replace(/\s*\n+\s*/g, " ")}
+                </span>
                 {option.correct ? (
-                  <span className="shrink-0 text-xs font-medium text-emerald-700">đáp án đúng</span>
+                  <span className="flex shrink-0 items-center gap-1 self-center text-xs font-medium text-success-foreground">
+                    <Check aria-hidden="true" className="size-3" /> đáp án đúng
+                  </span>
                 ) : null}
                 {picked ? (
-                  <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                  <span className="shrink-0 self-center text-xs font-medium text-muted-foreground">
                     bạn chọn
                   </span>
                 ) : null}
@@ -138,8 +184,21 @@ export function QuestionReview({
       {grade.perBlank && grade.perBlank.length > 0 ? (
         <ul className="flex flex-col gap-1 text-sm">
           {grade.perBlank.map((blank, position) => (
-            <li key={blank.name} className={blank.correct ? "text-emerald-800" : "text-destructive"}>
-              Ô {position + 1}: bạn gõ{" "}
+            <li
+              key={blank.name}
+              className={cn(
+                "flex flex-wrap items-center gap-x-1 gap-y-0.5",
+                blank.correct ? "text-success-foreground" : "text-destructive",
+              )}
+            >
+              {blank.correct ? (
+                <Check aria-hidden="true" className="size-3 shrink-0" />
+              ) : (
+                <X aria-hidden="true" className="size-3 shrink-0" />
+              )}
+              <span className="text-muted-foreground">
+                Ô {position + 1}: bạn gõ
+              </span>{" "}
               <span className="font-mono font-medium">
                 “{blank.value === "" ? "(để trống)" : blank.value}”
               </span>
@@ -148,7 +207,12 @@ export function QuestionReview({
               ) : (
                 <>
                   {" "}
-                  / đáp án đúng <span className="font-mono font-medium">“{blank.acceptedAnswer}”</span>
+                  <span className="text-muted-foreground">
+                    / đáp án đúng
+                  </span>{" "}
+                  <span className="font-mono font-medium">
+                    “{blank.acceptedAnswer}”
+                  </span>
                 </>
               )}
             </li>
@@ -156,25 +220,30 @@ export function QuestionReview({
         </ul>
       ) : null}
 
-      {/* The explanation sits under the graded answer, practice or exam alike.
-          A blank Question still gets one. Cached text comes from the server
-          (`initialExplanation`), so a Question explained before never flashes
-          empty; the admin's attempt detail passes a stored explanation instead
-          of the panel, so reading an old paper never calls the model. */}
-      {explanation === undefined ? (
+      {/* The explanation sits under the graded answer, practice or exam alike,
+          but only appears once the sinh viên clicks — the answer itself is
+          already visible. A blank Question still gets one. The admin's attempt
+          detail passes a stored explanation instead of the panel, so reading an
+          old paper never calls the model. */}
+      {explanation === undefined && attemptId !== undefined ? (
         <ExplanationPanel
+          attemptId={attemptId}
           questionId={question.id}
           questionHash={question.hash}
           mode="summary"
-          initialText={initialExplanation}
+          context={explanationContext}
         />
       ) : (
-        <div className="flex flex-col gap-1 rounded-lg border bg-muted/20 p-4 text-sm">
-          <p className="font-medium">Giải thích{explanation ? " đã lưu" : ""}</p>
+        <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-4 text-sm">
+          <p className="font-medium">
+            Giải thích{explanation ? " đã lưu" : ""}
+          </p>
           {explanation ? (
-            <p className="whitespace-pre-wrap leading-relaxed text-pretty">{explanation}</p>
+            <ExplanationText text={explanation} context={explanationContext} />
           ) : (
-            <p className="text-muted-foreground">Chưa có giải thích cho câu này.</p>
+            <p className="text-muted-foreground">
+              Chưa có giải thích cho câu này.
+            </p>
           )}
         </div>
       )}

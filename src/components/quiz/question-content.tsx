@@ -1,44 +1,31 @@
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import type { CodeLineItem, QuestionContentBlock } from "@/lib/quiz/markdown";
-import { parseQuestionContent, readMarkers, screenProse } from "@/lib/quiz/markdown";
-import { splitPlaceholders } from "@/lib/quiz/content";
-import { highlightLines } from "@/components/quiz/highlight";
+import { readMarkers, screenProse } from "@/lib/quiz/markdown";
+import type { RenderedQuestionContent } from "@/components/quiz/question-blocks";
+import type { HighlightedRun } from "@/components/quiz/highlight";
 
 /**
  * Question content renderer.
  *
- * Server components on purpose: shiki bundles a TextMate grammar + theme for
- * Python, which must never reach the browser. It is the one renderer of a
- * Question body everywhere (student runner, summary, admin review): the pure
- * `parseQuestionContent` decides what is prose and what is a program, and the
- * interactivity layer supplies a blank input at each `[[n]]` position.
+ * Deliberately **synchronous**: this is the one renderer of a Question body
+ * everywhere (student runner, summary, admin review), and the student runner
+ * and review form are client components, which React does not allow to be
+ * async. Parsing and shiki highlighting happen on the server instead
+ * (`prepareQuestionContent`), so the browser only ever receives finished HTML
+ * strings and never the Python grammar. The interactivity layer supplies a
+ * blank input at each `[[n]]` position.
  */
 
 /** A blank input, supplied by the interactivity layer. */
 export type RenderBlank = (name: string) => React.ReactNode;
 
-/** Raw Moodle `content` + how many blanks it has; markers outside that range stay text. */
-export async function QuestionContent({
-  content,
-  blankCount,
-  renderBlank,
-}: {
-  content: string;
-  blankCount: number;
-  renderBlank: RenderBlank;
-}) {
-  const blocks = parseQuestionContent(splitPlaceholders(content, blankCount));
-  return <QuestionBlocks blocks={blocks} renderBlank={renderBlank} />;
-}
-
-/** Already-parsed blocks, for callers that built them for a non-blank reason. */
-export async function QuestionBlocks({
+/** Server-prepared blocks; `renderBlank` places the inputs at their markers. */
+export function QuestionContent({
   blocks,
   renderBlank,
 }: {
-  blocks: readonly QuestionContentBlock[];
+  blocks: readonly RenderedQuestionContent[];
   renderBlank: RenderBlank;
 }) {
   return (
@@ -121,23 +108,22 @@ export function withBlanks(children: React.ReactNode, renderBlank?: RenderBlank)
 /**
  * A program with Python syntax highlighting.
  *
- * Every text run is highlighted in a light theme (`structure: "inline"`), so the
- * blank inputs sit inline exactly where their markers were and the program
- * keeps its indentation. Shiki escapes the program text before emitting spans.
+ * Every text run arrives already highlighted by shiki on the server
+ * (`structure: "inline"`), so the blank inputs sit inline exactly where their
+ * markers were and the program keeps its indentation. Shiki escaped the
+ * program text before emitting spans.
  */
-export async function CodeBlock({
+export function CodeBlock({
   lines,
   renderBlank,
 }: {
-  lines: readonly CodeLineItem[][];
+  lines: readonly HighlightedRun[][];
   renderBlank: RenderBlank;
 }) {
-  const highlighted = await highlightLines(lines);
-
   return (
-    <div className="overflow-x-auto rounded-lg border bg-white p-3 font-mono text-sm leading-6">
-      <div className="w-max min-w-full whitespace-pre">
-        {highlighted.map((runs, index) => (
+    <div className="code-sheet font-mono text-sm leading-6">
+      <div className="w-max min-w-full whitespace-pre bg-code-surface p-3 text-code-foreground">
+        {lines.map((runs, index) => (
           <div key={index} className="flex min-h-6 items-center">
             {runs.map((run, position) =>
               run.kind === "html" ? (
@@ -176,7 +162,7 @@ export function QuestionImages({
           <img
             src={src}
             alt={`Hình ảnh ${index + 1} của câu ${questionNo ?? ""}`.trim()}
-            className="max-h-64 w-auto rounded-lg border bg-white object-contain"
+            className="max-h-64 w-auto rounded-lg border bg-code-surface object-contain"
             loading="lazy"
           />
         </li>

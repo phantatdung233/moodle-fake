@@ -1,7 +1,7 @@
 /**
  * Hash of the parts of a Question that matter for grading and explanations:
  * content + options + blanks. The giảng viên changes an answer → hash changes →
- * cached Gemini explanations no longer apply (Spec, "Gemini"). The parser
+ * a stored explanation no longer applies. The parser
  * stamps it at upload; the review page recomputes it after every edit.
  */
 import { createHash } from "node:crypto";

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -153,7 +154,12 @@ export function QuizSettingsForm(props: QuizSettingsFormProps) {
           {error}
         </p>
       ) : null}
-      {saved ? <p className="text-sm text-emerald-700">Đã lưu cài đặt.</p> : null}
+      {saved ? (
+        <p className="flex items-center gap-2 text-sm text-success-foreground">
+          <Check aria-hidden="true" className="size-4 shrink-0 text-success" />
+          Đã lưu cài đặt.
+        </p>
+      ) : null}
 
       <Button type="submit" disabled={pending} className="self-start">
         {pending ? "Đang lưu…" : "Lưu cài đặt"}

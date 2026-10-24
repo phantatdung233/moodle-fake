@@ -125,9 +125,10 @@ function render(tree: unknown): string {
   return renderToStaticMarkup(tree as ReactElement);
 }
 
-async function signInAs(studentId: string, attemptId: string): Promise<void> {
+/** The identity cookie; each page resolves the student's Attempt for the Quiz. */
+async function signInAs(studentId: string): Promise<void> {
   jar.student = (
-    await createStudentSessionCookie({ studentId, attemptId }, process.env.SESSION_SECRET)
+    await createStudentSessionCookie({ studentId, studentName: "Sinh viên" }, process.env.SESSION_SECRET)
   ).value;
 }
 
@@ -161,11 +162,11 @@ describe("summary page", () => {
       blankValues: [],
     });
     await submitAttempt({ attemptId: started.attempt.id, studentId: "B2012345" });
-    await signInAs("B2012345", started.attempt.id);
+    await signInAs("B2012345");
 
     const html = render(await resolveTree(await SummaryPage({ params: Promise.resolve({ slug: "python-co-ban" }) })));
 
-    expect(html).toContain("Điểm: 20%");
+    expect(html).toContain('<span class="sr-only">Điểm: </span>20%');
     // `<dt>` and `<dd>` are separate elements; read each count next to its label.
     expect(html).toMatch(/Tổng câu<\/dt>[\s\S]*?<dd[^>]*>5<\/dd>/);
     expect(html).toMatch(/Đúng<\/dt>[\s\S]*?<dd[^>]*>1<\/dd>/);
@@ -176,23 +177,16 @@ describe("summary page", () => {
     expect(html.match(/questionHash=/g)).toHaveLength(5);
   });
 
-  it("câu đã có giải thích trong cache hiện sẵn trên trang tổng kết, không chờ Gemini", async () => {
-    const { saveExplanation } = await import("@/lib/gemini/cache");
+  it("mỗi câu có một panel giải thích, không mang theo văn bản cũ", async () => {
     const started = await resumeOrStartAttempt({ quizId, studentId: "B2012345", studentName: "An" });
     if (!started.ok) throw new Error(started.error);
-    const q001 = started.attempt.questionsSnapshot.find((question) => question.id === "Q001")!;
-    await saveExplanation({
-      questionHash: q001.hash,
-      questionId: "Q001",
-      text: "In ra e vì biến e được gán trước khi gọi print.",
-    });
     await submitAttempt({ attemptId: started.attempt.id, studentId: "B2012345" });
-    await signInAs("B2012345", started.attempt.id);
+    await signInAs("B2012345");
 
     const html = render(await resolveTree(await SummaryPage({ params: Promise.resolve({ slug: "python-co-ban" }) })));
-    // The stored text travels in the panel's initialText, not in an empty shell.
-    expect(html).toContain("In ra e vì biến e được gán trước khi gọi print.");
-    expect(html).toContain("initialText");
+
+    // Nothing is stored, so the panels start empty and ask the model themselves.
+    expect(html).not.toContain("initialText");
   });
 
   it("đề luyện tập cho làm lại ngay trên trang tổng kết", async () => {
@@ -201,7 +195,7 @@ describe("summary page", () => {
     const started = await resumeOrStartAttempt({ quizId: practiceId, studentId: "B9", studentName: "Bình" });
     if (!started.ok) throw new Error(started.error);
     await submitAttempt({ attemptId: started.attempt.id, studentId: "B9" });
-    await signInAs("B9", started.attempt.id);
+    await signInAs("B9");
 
     const html = render(
       await resolveTree(await SummaryPage({ params: Promise.resolve({ slug: "luyen-tap" }) })),
@@ -227,14 +221,14 @@ describe("summary page", () => {
     const started = await resumeOrStartAttempt({ quizId, studentId: "B2012345", studentName: "An" });
     if (!started.ok) throw new Error(started.error);
     await submitAttempt({ attemptId: started.attempt.id, studentId: "B2012345" });
-    await signInAs("B2012345", started.attempt.id);
+    await signInAs("B2012345");
     await archiveQuiz(quizId);
 
     const html = render(
       await resolveTree(await SummaryPage({ params: Promise.resolve({ slug: "python-co-ban" }) })),
     );
 
-    expect(html).toContain("Điểm: 0%");
+    expect(html).toContain('<span class="sr-only">Điểm: </span>0%');
     expect(html).not.toContain("Làm lại");
   });
 
@@ -274,7 +268,7 @@ describe("quiz page after submitting", () => {
     const started = await resumeOrStartAttempt({ quizId, studentId: "B1", studentName: "An" });
     if (!started.ok) throw new Error(started.error);
     await submitAttempt({ attemptId: started.attempt.id, studentId: "B1" });
-    await signInAs("B1", started.attempt.id);
+    await signInAs("B1");
 
     await expect(QuizPage({ params: Promise.resolve({ slug: "python-co-ban" }) })).rejects.toThrow(
       "NEXT_REDIRECT",
@@ -289,7 +283,7 @@ describe("quiz page after submitting", () => {
       { _id: started.attempt.id },
       { $set: { deadline: new Date(Date.now() - 1000) } },
     );
-    await signInAs("B1", started.attempt.id);
+    await signInAs("B1");
 
     await expect(QuizPage({ params: Promise.resolve({ slug: "python-co-ban" }) })).rejects.toThrow(
       "NEXT_REDIRECT",
@@ -301,7 +295,7 @@ describe("quiz page after submitting", () => {
   it("không cho lượt làm mới khi đã hết maxAttempts", async () => {
     const started = await resumeOrStartAttempt({ quizId, studentId: "B1", studentName: "An" });
     if (!started.ok) throw new Error(started.error);
-    await signInAs("B1", started.attempt.id);
+    await signInAs("B1");
     const submitted = await submitAttempt({ attemptId: started.attempt.id, studentId: "B1" });
     if (!submitted.ok) throw new Error(submitted.error);
 
@@ -318,32 +312,57 @@ describe("quiz page after submitting", () => {
     });
   });
 
-  it("câu đã xem đáp án ở lượt đang làm nhận sẵn giải thích từ cache", async () => {
+  it("lượt đang làm không mang theo giải thích cũ: panel tự hỏi model", async () => {
     const practiceId = await seedPublishedQuiz({ slug: "luyen-tap" });
     const started = await resumeOrStartAttempt({ quizId: practiceId, studentId: "B1", studentName: "An" });
     if (!started.ok) throw new Error(started.error);
-    const q001 = started.attempt.questionsSnapshot.find((question) => question.id === "Q001")!;
-    const questionHash = q001.hash;
-    const { saveExplanation } = await import("@/lib/gemini/cache");
-    await saveExplanation({ questionHash, questionId: "Q001", text: "Giải thích đã có sẵn." });
-    await signInAs("B1", started.attempt.id);
+    await signInAs("B1");
 
     const { loadAttempt } = await import("@/lib/student/actions");
     const attempt = await loadAttempt({ slug: "luyen-tap" });
 
-    // The runner reads `initialText` from this map, so a revealed Question
-    // opens with the stored text instead of an empty panel.
-    expect(attempt?.explanationsByHash?.[questionHash]).toBe("Giải thích đã có sẵn.");
+    expect(attempt).not.toBeNull();
+    expect(attempt && "explanationsByHash" in attempt).toBe(false);
   });
 
   it("bài đang làm dở vẫn mở màn hình làm bài, không chuyển trang", async () => {
     const started = await resumeOrStartAttempt({ quizId, studentId: "B1", studentName: "An" });
     if (!started.ok) throw new Error(started.error);
-    await signInAs("B1", started.attempt.id);
+    await signInAs("B1");
 
     const page = await QuizPage({ params: Promise.resolve({ slug: "python-co-ban" }) });
 
     expect(navigation.redirected).toBeNull();
     expect(page).toBeTruthy();
+  });
+
+  it("đã nhập MSSV ở trang chủ: mở đề lần đầu không hỏi lại danh tính", async () => {
+    const practiceId = await seedPublishedQuiz({ slug: "luyen-tap" });
+    // The home page remembers the identity only — no Attempt exists yet.
+    await signInAs("B1");
+
+    const page = await resolveTree(
+      await QuizPage({ params: Promise.resolve({ slug: "luyen-tap" }) }),
+    );
+    const markup = render(page);
+
+    // The paper itself, not the "Nhập tên để bắt đầu" card.
+    expect(markup).toContain("client:QuizRunner");
+    expect(markup).not.toContain("Nhập tên để bắt đầu");
+
+    // Opening the page started the Attempt for that MSSV.
+    const { getSummaryForStudent } = await import("@/lib/quiz/attempt-repository");
+    const summary = await getSummaryForStudent(practiceId, "B1");
+    expect(summary?.inProgress).toMatchObject({ studentId: "B1", status: "in_progress" });
+  });
+
+  it("chưa có danh tính: vẫn hiện form nhập MSSV", async () => {
+    const page = await resolveTree(
+      await QuizPage({ params: Promise.resolve({ slug: "python-co-ban" }) }),
+    );
+    const markup = render(page);
+
+    expect(markup).toContain("client:IdentityForm");
+    expect(markup).not.toContain("client:QuizRunner");
   });
 });

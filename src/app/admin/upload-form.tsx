@@ -4,6 +4,7 @@ import { startTransition, useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
 import { cn } from "@/lib/utils";
 import { slugifyTitle } from "@/lib/quiz/slug";
 import { toUploadFilePayload } from "@/lib/admin/upload-file";
@@ -92,13 +93,32 @@ export function UploadForm() {
       {preview ? null : (
         <form action={previewAction} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="preview-file">File JSON xuất từ Moodle</Label>
-            <Input
+            {/*
+              The browser's own file button reads "Choose File / No file chosen"
+              in English, whatever the page language. Hide it from view but keep
+              it in the form (the label opens it), and show the chosen name.
+            */}
+            <span className="text-sm font-medium" aria-hidden="true">
+              File JSON xuất từ Moodle
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" size="sm" asChild>
+                <label htmlFor="preview-file" className="cursor-pointer">
+                  Chọn file…
+                </label>
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {file ? file.name : "Chưa chọn file nào"}
+              </span>
+            </div>
+            <input
               id="preview-file"
               name="file"
               type="file"
               accept="application/json,.json"
               required
+              aria-label="File JSON xuất từ Moodle"
+              className="sr-only"
               onChange={(event) => {
                 setFile(event.target.files?.[0] ?? null);
                 setFileError(undefined);
@@ -209,7 +229,7 @@ function QuizPreviewSummary({ preview }: { preview: QuizUploadPreview }) {
       </p>
 
       {preview.errors.length > 0 ? (
-        <details className="rounded-lg border p-3">
+        <details className="rounded-sm border p-3">
           <summary className="cursor-pointer font-medium">
             Lỗi parse ({preview.errors.length} câu Moodle xuất hỏng)
           </summary>
@@ -250,9 +270,9 @@ function Stat({
   highlight?: boolean;
 }) {
   return (
-    <div className="flex flex-col rounded-lg border px-3 py-2">
+    <div className="flex flex-col border px-3 py-2">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={cn("text-lg font-semibold", highlight && "text-amber-600")}>
+      <dd className={cn("text-lg font-semibold", highlight && "text-warning")}>
         {value}
       </dd>
     </div>
